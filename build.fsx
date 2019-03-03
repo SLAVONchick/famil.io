@@ -1,5 +1,8 @@
 #r "paket: 
 nuget Fake.BuildServer.TeamCity
+nuget Fake.Core
+nuget Fake.IO
+nuget Fake.DotNet
 groupref build //"
 #load "./.fake/build.fsx/intellisense.fsx"
 
