@@ -1,9 +1,4 @@
-#r "paket: 
-nuget Fake.BuildServer.TeamCity
-nuget Fake.Core
-nuget Fake.IO
-nuget Fake.DotNet
-groupref build //"
+#r "paket: groupref build //"
 #load "./.fake/build.fsx/intellisense.fsx"
 
 #if !FAKE
@@ -16,7 +11,7 @@ open System
 open Fake.Core
 open Fake.DotNet
 open Fake.IO
-open Fake.BuildServer
+//open Fake.BuildServer
 
 let serverPath = Path.getFullName "./src/Server"
 let clientPath = Path.getFullName "./src/Client"
@@ -61,7 +56,7 @@ let openBrowser url =
 
 
 Target.create "Clean" (fun _ ->
-    TeamCity.warning "Test TeamCity warnings"
+    //TeamCity.warning "Test TeamCity warnings"
     [ deployDir
       clientDeployPath ]
     |> Shell.cleanDirs
