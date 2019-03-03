@@ -11,6 +11,7 @@ open System
 open Fake.Core
 open Fake.DotNet
 open Fake.IO
+open Fake.BuildServer
 
 let serverPath = Path.getFullName "./src/Server"
 let clientPath = Path.getFullName "./src/Client"
@@ -55,6 +56,7 @@ let openBrowser url =
 
 
 Target.create "Clean" (fun _ ->
+    TeamCity.warning "Test TeamCity warnings"
     [ deployDir
       clientDeployPath ]
     |> Shell.cleanDirs
