@@ -1,4 +1,6 @@
-#r "paket: groupref build //"
+#r "paket: 
+nuget Fake.BuildServer.TeamCity
+groupref build //"
 #load "./.fake/build.fsx/intellisense.fsx"
 
 #if !FAKE
