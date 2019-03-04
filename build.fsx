@@ -59,13 +59,14 @@ let openBrowser url =
 
 
 Target.create "Clean" (fun _ ->
-    TeamCity.reportBuildStatus "Ok" "Test TeamCity warnings"
+    use __ = TeamCity.block "Clean" "Cleaning"
     [ deployDir
       clientDeployPath ]
     |> Shell.cleanDirs
 )
 
 Target.create "InstallClient" (fun _ ->
+    use __ = TeamCity.block "Install Client" "Installing the client"
     printfn "Node version:"
     runTool nodeTool "--version" __SOURCE_DIRECTORY__
     printfn "Yarn version:"
@@ -75,6 +76,7 @@ Target.create "InstallClient" (fun _ ->
 )
 
 Target.create "Build" (fun _ ->
+    use __ = TeamCity.block "Build" "Building"
     runDotNet "build" serverPath
     runTool yarnTool "webpack-cli -p" __SOURCE_DIRECTORY__
 )
