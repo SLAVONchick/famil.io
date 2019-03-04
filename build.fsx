@@ -59,7 +59,7 @@ let openBrowser url =
 
 
 Target.create "Clean" (fun _ ->
-    TeamCity.reportBuildProblem "Test TeamCity warnings"
+    TeamCity.reportBuildStatus "Ok" "Test TeamCity warnings"
     [ deployDir
       clientDeployPath ]
     |> Shell.cleanDirs
