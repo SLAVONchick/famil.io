@@ -463,3 +463,5 @@ ASALocalRun/
 healthchecksdb
 
 # End of https://www.gitignore.io/api/rider,linux,fsharp,visualstudio,visualstudiocode
+build.fsx.lock
+paket.lock
