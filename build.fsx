@@ -13,8 +13,8 @@ open Fake.DotNet
 open Fake.IO
 //open Fake.BuildServer
 
-BuildServer.install [
-    TeamCity.Installer ]
+//BuildServer.install [
+//    TeamCity.Installer ]
 
 let serverPath = Path.getFullName "./src/Server"
 let clientPath = Path.getFullName "./src/Client"
