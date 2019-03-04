@@ -11,7 +11,7 @@ open System
 open Fake.Core
 open Fake.DotNet
 open Fake.IO
-open Fake.BuildServer
+//open Fake.BuildServer
 
 BuildServer.install [
     TeamCity.Installer ]
@@ -59,14 +59,14 @@ let openBrowser url =
 
 
 Target.create "Clean" (fun _ ->
-    use __ = TeamCity.block "Clean" "Cleaning"
+    //use __ = TeamCity.block "Clean" "Cleaning"
     [ deployDir
       clientDeployPath ]
     |> Shell.cleanDirs
 )
 
 Target.create "InstallClient" (fun _ ->
-    use __ = TeamCity.block "Install Client" "Installing the client"
+    //use __ = TeamCity.block "Install Client" "Installing the client"
     printfn "Node version:"
     runTool nodeTool "--version" __SOURCE_DIRECTORY__
     printfn "Yarn version:"
@@ -76,7 +76,7 @@ Target.create "InstallClient" (fun _ ->
 )
 
 Target.create "Build" (fun _ ->
-    use __ = TeamCity.block "Build" "Building"
+    //use __ = TeamCity.block "Build" "Building"
     runDotNet "build" serverPath
     runTool yarnTool "webpack-cli -p" __SOURCE_DIRECTORY__
 )
