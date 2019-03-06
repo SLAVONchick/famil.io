@@ -2,6 +2,7 @@
 # Edit at https://www.gitignore.io/?templates=rider,linux,fsharp,visualstudio,visualstudiocode
 
 ### fsharp ###
+
 .fable/
 .fake/
 .vs/
