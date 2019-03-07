@@ -13,26 +13,36 @@ open Shared
 
 
 open Fulma
+open Fable.Helpers
 
 
 // The model holds data that you want to keep track of while the application is running
 // in this case, we are keeping track of a counter
 // we mark it as optional, because initially it will not be available from the client
 // the initial value will be requested from server
-type Model = { Counter: Counter option }
+type Activation =
+    | Activate
+    | Deactivate
+
+type Model = { 
+               Counter: Counter option
+               IsActive: bool 
+             }
+             //member __.Activation = if __.IsActive then Deactivate else Activate
 
 // The Msg type defines what events/actions can occur while the application is running
 // the state of the application changes *only* in reaction to these events
 type Msg =
 | Increment
 | Decrement
+| Activation of Activation
 | InitialCountLoaded of Result<Counter, exn>
 
 let initialCounter = fetchAs<Counter> "/api/init" (Decode.Auto.generateDecoder())
 
 // defines the initial state and initial command (= side-effect) of the application
 let init () : Model * Cmd<Msg> =
-    let initialModel = { Counter = None }
+    let initialModel = { Counter = None; IsActive = false}
     let loadCountCmd =
         Cmd.ofPromise
             initialCounter
@@ -54,8 +64,13 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     | Some counter, Decrement ->
         let nextModel = { currentModel with Counter = Some { Value = counter.Value - 1 } }
         nextModel, Cmd.none
+    | _, Activation act ->
+        let nextModel = match act with
+                        | Activate ->  {currentModel with IsActive = true }
+                        | Deactivate -> {currentModel with IsActive = false}
+        nextModel, Cmd.none
     | _, InitialCountLoaded (Ok initialCount)->
-        let nextModel = { Counter = Some initialCount }
+        let nextModel = { Counter = Some initialCount; IsActive = false}
         nextModel, Cmd.none
 
     | _ -> currentModel, Cmd.none
@@ -90,12 +105,75 @@ let button txt onClick =
           Button.OnClick onClick ]
         [ str txt ]
 
+let basicModal isActive closeDisplay =
+    Modal.modal [ Modal.IsActive isActive ]
+        [ Modal.background [ Props [ OnClick closeDisplay ] ] [ ]
+          Modal.content [ ]
+            [ Box.box' [ ]
+                [ str "Test" ] ]
+          Modal.close [ Modal.Close.Size IsLarge
+                        Modal.Close.OnClick closeDisplay ] [ ] ]
+
+//let toggleDisplay (modal : Fable.Import.React.ReactElement) = Modal.IsActive (not modal)
+
+
+
 let view (model : Model) (dispatch : Msg -> unit) =
     div []
-        [ Navbar.navbar [ Navbar.Color IsPrimary ]
-            [ Navbar.Item.div [ ]
-                [ Heading.h2 [ ]
-                    [ str "SAFE Template" ] ] ]
+        [ 
+          Navbar.navbar [ ]
+              [ Navbar.Brand.div [ ]
+                  [ Navbar.Item.a [ Navbar.Item.Props [ Href "#" ] ]
+                      [ img [ Style [ Width "2.5em" ] // Force svg display
+                              Src @"C:\Projects\fs\safe\src\Client\public\favicon.png" ] ]
+                    Navbar.burger [
+                        GenericOption.Props [
+                            //HTMLAttr.Custom ("data-target", "myNavbar")
+                            //HTMLAttr.Custom ("aria-label", "menu")
+                            AriaExpanded model.IsActive
+                            OnClick (fun _ -> match model.IsActive with
+                                              | true -> dispatch (Activation (Deactivate))
+                                              | _ -> dispatch (Activation (Activate)))
+                        ]
+                        CustomClass "burger"
+                        CustomClass (if model.IsActive then "is-active" else "")
+                    ] [
+                        span [ Hidden true ] []
+                        span [ Hidden true ] []
+                        span [ Hidden true ] []
+                    ]
+                  ]
+                Navbar.menu [ 
+                    Navbar.Menu.Props [
+                        Id "myNavbar"
+                    ] 
+                    Navbar.Menu.Option.CustomClass (if model.IsActive then "is-active" else "")
+                ] [
+                Navbar.Item.a [ Navbar.Item.HasDropdown
+                                Navbar.Item.IsHoverable ]
+                  [ Navbar.Link.a [ ]
+                      [ str "Docs" ]
+                    Navbar.Dropdown.div [ ]
+                      [ Navbar.Item.a [ ]
+                          [ str "Overwiew" ]
+                        Navbar.Item.a [ ]
+                          [ str "Elements" ]
+                        Navbar.divider [ ] [ ]
+                        Navbar.Item.a [ ]
+                          [ str "Components" ] ] ]
+                Navbar.Item.a [ Navbar.Item.HasDropdown
+                                Navbar.Item.IsHoverable ]
+                  [ Navbar.Link.a [ Navbar.Link.Option.IsArrowless ]
+                      [ str "Link without arrow" ]
+                    Navbar.Dropdown.div [ ]
+                      [ Navbar.Item.a [ ]
+                          [ str "Overwiew" ] ] ]
+                ]
+                Navbar.End.div [ ]
+                  [ Navbar.Item.div [ ]
+                      [ Button.button [ Button.Color IsSuccess ]
+                          [ str "Demo" ] ] ] ]
+          
 
           Container.container []
               [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
