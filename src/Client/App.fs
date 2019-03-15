@@ -10,67 +10,89 @@ open Fable.PowerPack.Fetch
 open Thoth.Json
 
 open Shared
+open Home
 
 
 open Fulma
 open Fable.Helpers
+open Fable.Import
+open System.Drawing
+open Fulma
+open Fulma
 
 
 // The model holds data that you want to keep track of while the application is running
 // in this case, we are keeping track of a counter
 // we mark it as optional, because initially it will not be available from the client
 // the initial value will be requested from server
+
+type Page =
+    | Home
+    | Description
+
+type Stage = CurrentPage of Page
+
+type Url = Url of string
+
 type Activation =
     | Activate
     | Deactivate
 
-type Model = { 
-               Counter: Counter option
-               IsActive: bool 
-             }
-             //member __.Activation = if __.IsActive then Deactivate else Activate
 
 // The Msg type defines what events/actions can occur while the application is running
 // the state of the application changes *only* in reaction to these events
 type Msg =
-| Increment
-| Decrement
-| Activation of Activation
-| InitialCountLoaded of Result<Counter, exn>
+    //| Increment
+    //| Decrement
+    | Activation of Activation
+    | NavigateTo of Url
+    //| InitialCountLoaded of Result<Counter, exn>
 
-let initialCounter = fetchAs<Counter> "/api/init" (Decode.Auto.generateDecoder())
+type Model = {
+               Stage : Stage
+               IsActive : bool
+               //SubView : Model -> (Msg -> unit) -> React.ReactElement
+             }
+             member __.Activation = if __.IsActive then Deactivate else Activate
+
+             member this.SubView =
+                match this.Stage with
+                | CurrentPage (Home) -> Home.view
+                | CurrentPage (Description) -> Description.view
+
+
+//let initialCounter = fetchAs<Counter> "/api/init" (Decode.Auto.generateDecoder())
 
 // defines the initial state and initial command (= side-effect) of the application
 let init () : Model * Cmd<Msg> =
-    let initialModel = { Counter = None; IsActive = false}
-    let loadCountCmd =
-        Cmd.ofPromise
-            initialCounter
-            []
-            (Ok >> InitialCountLoaded)
-            (Error >> InitialCountLoaded)
-    initialModel, loadCountCmd
+    let initialModel = { IsActive = false; Stage = CurrentPage(Home) }
+    let initialCmd =
+        Cmd.ofMsg(NavigateTo(Url "/home"))
+    initialModel, initialCmd
 
 
 
 // The update function computes the next state of the application based on the current state and the incoming events/messages
 // It can also run side-effects (encoded as commands) like calling the server via Http.
 // these commands in turn, can dispatch messages to which the update function will react.
+
+let getNextActive act =
+    match act with
+    | Activate ->  true
+    | Deactivate -> false
+
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
-    match currentModel.Counter, msg with
-    | Some counter, Increment ->
-        let nextModel = { currentModel with Counter = Some { Value = counter.Value + 1 } }
+    match msg with
+    | Activation act ->
+        let nextModel = {currentModel with IsActive = getNextActive act; }
         nextModel, Cmd.none
-    | Some counter, Decrement ->
-        let nextModel = { currentModel with Counter = Some { Value = counter.Value - 1 } }
+
+    | NavigateTo (Url "/home") ->
+        let nextModel = {currentModel with Stage = CurrentPage Home}
         nextModel, Cmd.none
-    | _, Activation act ->
-        let nextModel = match act with
-                        | Activate ->  {currentModel with IsActive = true }
-                        | Deactivate -> {currentModel with IsActive = false}
-        nextModel, Cmd.none
-    | _, InitialCountLoaded (Ok initialCount)->
-        let nextModel = { Counter = Some initialCount; IsActive = false}
+
+    | NavigateTo (Url "/description") ->
+        let nextModel = {currentModel with Stage = CurrentPage Description}
         nextModel, Cmd.none
 
     | _ -> currentModel, Cmd.none
@@ -94,9 +116,9 @@ let safeComponents =
           str " powered by: "
           components ]
 
-let show = function
-| { Counter = Some counter } -> string counter.Value
-| { Counter = None   } -> "Loading..."
+//let show = function
+//| { Counter = Some counter } -> string counter.Value
+//| { Counter = None   } -> "Loading..."
 
 let button txt onClick =
     Button.button
@@ -119,13 +141,32 @@ let basicModal isActive closeDisplay =
 
 
 let view (model : Model) (dispatch : Msg -> unit) =
+
+    let currentUrl =
+        match model.Stage with
+        | CurrentPage (Page.Home _ ) -> "/home "
+        | CurrentPage (Page.Description _) -> "/description"
+
+    let navItem nextUrl title =
+        //let notActive = currentUrl <> nextUrl
+        //let navLinkClass = if notActive then "nav-link" else "nav-link active"
+        //Navbar.Item.a [ ] [
+        //    a [ Href "#"
+        //        OnClick (fun _ -> dispatch (NavigateTo (Url nextUrl))) ]
+        //      [ str title ] ]
+        Navbar.Item.a [ Navbar.Item.IsHoverable ] [
+            Button.button [
+                Button.Option.OnClick (fun _ -> dispatch (NavigateTo (Url nextUrl)))
+                Button.IsHovered true
+                Button.Color IsInfo ]
+              [ str title ] ]
     div []
-        [ 
+        [
           Navbar.navbar [ ]
               [ Navbar.Brand.div [ ]
-                  [ Navbar.Item.a [ Navbar.Item.Props [ Href "#" ] ]
+                  [ Navbar.Item.a [ ]//Navbar.Item.Props [ Href "#" ] ]
                       [ img [ Style [ Width "2.5em" ] // Force svg display
-                              Src @"C:\Projects\fs\safe\src\Client\public\favicon.png" ] ]
+                              Src @"/public/favicon.png" ] ]
                     Navbar.burger [
                         GenericOption.Props [
                             //HTMLAttr.Custom ("data-target", "myNavbar")
@@ -143,44 +184,26 @@ let view (model : Model) (dispatch : Msg -> unit) =
                         span [ Hidden true ] []
                     ]
                   ]
-                Navbar.menu [ 
+                Navbar.menu [
                     Navbar.Menu.Props [
                         Id "myNavbar"
-                    ] 
+                    ]
+                    Navbar.Menu.Modifiers [
+                        Modifier.BackgroundColor Color.IsPrimary
+                        Modifier.TextColor Color.IsBlack ]
                     Navbar.Menu.Option.CustomClass (if model.IsActive then "is-active" else "")
                 ] [
-                Navbar.Item.a [ Navbar.Item.HasDropdown
-                                Navbar.Item.IsHoverable ]
-                  [ Navbar.Link.a [ ]
-                      [ str "Docs" ]
-                    Navbar.Dropdown.div [ ]
-                      [ Navbar.Item.a [ ]
-                          [ str "Overwiew" ]
-                        Navbar.Item.a [ ]
-                          [ str "Elements" ]
-                        Navbar.divider [ ] [ ]
-                        Navbar.Item.a [ ]
-                          [ str "Components" ] ] ]
-                Navbar.Item.a [ Navbar.Item.HasDropdown
-                                Navbar.Item.IsHoverable ]
-                  [ Navbar.Link.a [ Navbar.Link.Option.IsArrowless ]
-                      [ str "Link without arrow" ]
-                    Navbar.Dropdown.div [ ]
-                      [ Navbar.Item.a [ ]
-                          [ str "Overwiew" ] ] ]
+                navItem "/home" "Home"
+                navItem "/description" "Description"
                 ]
                 Navbar.End.div [ ]
                   [ Navbar.Item.div [ ]
                       [ Button.button [ Button.Color IsSuccess ]
                           [ str "Demo" ] ] ] ]
-          
+
 
           Container.container []
-              [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
-                    [ Heading.h3 [] [ str ("Press buttons to manipulate counter: " + show model) ] ]
-                Columns.columns []
-                    [ Column.column [] [ button "-" (fun _ -> dispatch Decrement) ]
-                      Column.column [] [ button "+" (fun _ -> dispatch Increment) ] ] ]
+              [ model.SubView ]
 
           Footer.footer [ ]
                 [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
