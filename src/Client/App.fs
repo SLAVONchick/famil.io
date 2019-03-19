@@ -21,10 +21,6 @@ open Fulma
 open Fulma
 
 
-// The model holds data that you want to keep track of while the application is running
-// in this case, we are keeping track of a counter
-// we mark it as optional, because initially it will not be available from the client
-// the initial value will be requested from server
 
 type Page =
     | Home
@@ -39,19 +35,13 @@ type Activation =
     | Deactivate
 
 
-// The Msg type defines what events/actions can occur while the application is running
-// the state of the application changes *only* in reaction to these events
 type Msg =
-    //| Increment
-    //| Decrement
     | Activation of Activation
     | NavigateTo of Url
-    //| InitialCountLoaded of Result<Counter, exn>
 
 type Model = {
                Stage : Stage
                IsActive : bool
-               //SubView : Model -> (Msg -> unit) -> React.ReactElement
              }
              member __.Activation = if __.IsActive then Deactivate else Activate
 
@@ -61,9 +51,6 @@ type Model = {
                 | CurrentPage (Description) -> Description.view
 
 
-//let initialCounter = fetchAs<Counter> "/api/init" (Decode.Auto.generateDecoder())
-
-// defines the initial state and initial command (= side-effect) of the application
 let init () : Model * Cmd<Msg> =
     let initialModel = { IsActive = false; Stage = CurrentPage(Home) }
     let initialCmd =
@@ -72,9 +59,6 @@ let init () : Model * Cmd<Msg> =
 
 
 
-// The update function computes the next state of the application based on the current state and the incoming events/messages
-// It can also run side-effects (encoded as commands) like calling the server via Http.
-// these commands in turn, can dispatch messages to which the update function will react.
 
 let getNextActive act =
     match act with
@@ -116,9 +100,6 @@ let safeComponents =
           str " powered by: "
           components ]
 
-//let show = function
-//| { Counter = Some counter } -> string counter.Value
-//| { Counter = None   } -> "Loading..."
 
 let button txt onClick =
     Button.button
@@ -127,16 +108,6 @@ let button txt onClick =
           Button.OnClick onClick ]
         [ str txt ]
 
-let basicModal isActive closeDisplay =
-    Modal.modal [ Modal.IsActive isActive ]
-        [ Modal.background [ Props [ OnClick closeDisplay ] ] [ ]
-          Modal.content [ ]
-            [ Box.box' [ ]
-                [ str "Test" ] ]
-          Modal.close [ Modal.Close.Size IsLarge
-                        Modal.Close.OnClick closeDisplay ] [ ] ]
-
-//let toggleDisplay (modal : Fable.Import.React.ReactElement) = Modal.IsActive (not modal)
 
 
 
@@ -148,12 +119,6 @@ let view (model : Model) (dispatch : Msg -> unit) =
         | CurrentPage (Page.Description _) -> "/description"
 
     let navItem nextUrl title =
-        //let notActive = currentUrl <> nextUrl
-        //let navLinkClass = if notActive then "nav-link" else "nav-link active"
-        //Navbar.Item.a [ ] [
-        //    a [ Href "#"
-        //        OnClick (fun _ -> dispatch (NavigateTo (Url nextUrl))) ]
-        //      [ str title ] ]
         Navbar.Item.a [ Navbar.Item.IsHoverable ] [
             Button.button [
                 Button.Option.OnClick (fun _ -> dispatch (NavigateTo (Url nextUrl)))
@@ -164,13 +129,11 @@ let view (model : Model) (dispatch : Msg -> unit) =
         [
           Navbar.navbar [ ]
               [ Navbar.Brand.div [ ]
-                  [ Navbar.Item.a [ ]//Navbar.Item.Props [ Href "#" ] ]
-                      [ img [ Style [ Width "2.5em" ] // Force svg display
+                  [ Navbar.Item.a [ ]
+                      [ img [ Style [ Width "2.5em" ]
                               Src @"/public/favicon.png" ] ]
                     Navbar.burger [
                         GenericOption.Props [
-                            //HTMLAttr.Custom ("data-target", "myNavbar")
-                            //HTMLAttr.Custom ("aria-label", "menu")
                             AriaExpanded model.IsActive
                             OnClick (fun _ -> match model.IsActive with
                                               | true -> dispatch (Activation (Deactivate))

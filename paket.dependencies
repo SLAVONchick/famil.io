@@ -1,10 +1,19 @@
+source https://www.nuget.org/api/v2
+
+nuget FSharp.Core
+nuget linq2db
+nuget linq2db.Identity
+nuget linq2db.PostgreSQL
 version 5.198.0
 group Server
     source https://api.nuget.org/v3/index.json
     framework: netcoreapp2.2
     storage: none
 
+    nuget linq2db.Identity
     nuget FSharp.Core
+    nuget linq2db.PostgreSQL
+    nuget Npgsql
     nuget Saturn
     nuget Thoth.Json.Giraffe
 
@@ -32,4 +41,3 @@ group Build
     nuget Fake.Core.Target
     nuget Fake.DotNet.Cli
     nuget Fake.IO.FileSystem
-
