@@ -87,7 +87,7 @@ module Startup =
         ) |> (function | (true, _ ) -> ()
                        | (false, s) -> printfn "database was not created:\n%s" s)
         (
-            use db = new ApplicationDataConnection()
+            use db = new ApplicationDataConnection("Auth")
             Db.tryCreateTable<IdentityRole> db
             |> Option.bind Db.tryCreateTable<IdentityUserClaim<string>>
             |> Option.bind Db.tryCreateTable<IdentityRoleClaim<string>>

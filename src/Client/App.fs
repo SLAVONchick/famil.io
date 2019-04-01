@@ -1,5 +1,7 @@
 module Client
 
+module UrlParser = Elmish.Browser.UrlParser
+
 open Elmish
 open Elmish.React
 
@@ -19,14 +21,16 @@ open Fable.Import
 open System.Drawing
 open Fulma
 open Fulma
+open Elmish.Browser.Navigation
 
 
 
 type Page =
+    | Default
     | Home
     | Description
 
-type Stage = CurrentPage of Page
+//type Stage = CurrentPage of Page
 
 type Url = Url of string
 
@@ -40,19 +44,38 @@ type Msg =
     | NavigateTo of Url
 
 type Model = {
-               Stage : Stage
+               Stage : Page
                IsActive : bool
              }
              member __.Activation = if __.IsActive then Deactivate else Activate
 
              member this.SubView =
                 match this.Stage with
-                | CurrentPage (Home) -> Home.view
-                | CurrentPage (Description) -> Description.view
+                | Default
+                | Home -> Home.view
+                | Description -> Description.view
 
 
-let init () : Model * Cmd<Msg> =
-    let initialModel = { IsActive = false; Stage = CurrentPage(Home) }
+let route: UrlParser.State<Page->Page> -> UrlParser.State<Page> list =
+    UrlParser.oneOf [
+        UrlParser.map Default (UrlParser.s "")
+        UrlParser.map Home (UrlParser.s "home")
+        UrlParser.map Description (UrlParser.s "description")
+    ]
+
+
+let urlUpdate (result: Page option) model =
+    match result with
+    | Some Default
+    | Some (Home) ->
+        {model with Stage = result.Value}, Cmd.none
+    | Some Description ->
+        {model with Stage = result.Value}, Cmd.none
+    | _ -> model, Cmd.none
+
+
+let init page: Model * Cmd<Msg> =
+    let initialModel = { IsActive = false; Stage = Home }
     let initialCmd =
         Cmd.ofMsg(NavigateTo(Url "/home"))
     initialModel, initialCmd
@@ -72,12 +95,12 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
         nextModel, Cmd.none
 
     | NavigateTo (Url "/home") ->
-        let nextModel = {currentModel with Stage = CurrentPage Home}
-        nextModel, Cmd.none
+        let nextModel = {currentModel with Stage = Home}
+        nextModel, Navigation.modifyUrl "/home"
 
     | NavigateTo (Url "/description") ->
-        let nextModel = {currentModel with Stage = CurrentPage Description}
-        nextModel, Cmd.none
+        let nextModel = {currentModel with Stage = Description}
+        nextModel, Navigation.modifyUrl "/description"
 
     | _ -> currentModel, Cmd.none
 
@@ -115,8 +138,8 @@ let view (model : Model) (dispatch : Msg -> unit) =
 
     let currentUrl =
         match model.Stage with
-        | CurrentPage (Page.Home _ ) -> "/home "
-        | CurrentPage (Page.Description _) -> "/description"
+        | Page.Home -> "/home "
+        | Page.Description -> "/description"
 
     let navItem nextUrl title =
         Navbar.Item.a [ Navbar.Item.IsHoverable ] [
@@ -178,6 +201,7 @@ open Elmish.HMR
 #endif
 
 Program.mkProgram init update view
+|> Program.toNavigable (UrlParser.parsePath route) urlUpdate
 #if DEBUG
 |> Program.withConsoleTrace
 |> Program.withHMR

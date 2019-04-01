@@ -2,8 +2,8 @@ namespace Server.Models
 
 open LinqToDB.Identity
 open LinqToDB
-type ApplicationDataConnection() = class
-    inherit IdentityDataConnection<ApplicationUser>()
+type ApplicationDataConnection(conf) = class
+    inherit IdentityDataConnection<ApplicationUser>(conf)
     end
 
 
