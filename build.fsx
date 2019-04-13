@@ -132,7 +132,6 @@ open Fake.Core.TargetOperators
     ==> "RunClient"
 
 "Clean"
-    ==> "InstallClient"
     ==> "RunServer"
 
 Target.runOrDefaultWithArguments "Build"
