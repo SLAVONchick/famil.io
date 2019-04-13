@@ -13,6 +13,7 @@ group Server
     nuget linq2db.Identity
     nuget FSharp.Core
     nuget linq2db.PostgreSQL
+nuget Microsoft.AspNetCore.Authentication.OpenIdConnect
     nuget Npgsql
     nuget Saturn
     nuget Thoth.Json.Giraffe

@@ -81,10 +81,7 @@ Target.create "Build" (fun _ ->
     runTool yarnTool "webpack-cli -p" __SOURCE_DIRECTORY__
 )
 
-Target.create "Run" (fun _ ->
-    let server = async {
-        runDotNet "watch run" serverPath
-    }
+Target.create "RunClient" (fun _ ->
     let client = async {
         runTool yarnTool "webpack-dev-server" __SOURCE_DIRECTORY__
     }
@@ -93,18 +90,30 @@ Target.create "Run" (fun _ ->
         openBrowser "http://localhost:8080"
     }
 
-    let vsCodeSession = Environment.hasEnvironVar "vsCodeSession"
-    let safeClientOnly = Environment.hasEnvironVar "safeClientOnly"
-
-    let tasks =
-        [ if not safeClientOnly then yield server
-          yield client
-          if not vsCodeSession then yield browser ]
+    let tasks = [client; browser]
 
     tasks
     |> Async.Parallel
     |> Async.RunSynchronously
     |> ignore
+)
+
+Target.create "RunServer" (fun _ ->
+    let server = async {
+        runDotNet "watch run" serverPath
+    }
+
+    let browser = async {
+        do! Async.Sleep 5000
+        openBrowser "http://localhost:8080"
+    }
+    let tasks = [server; browser]
+
+    tasks
+    |> Async.Parallel
+    |> Async.RunSynchronously
+    |> ignore
+
 )
 
 
@@ -120,6 +129,10 @@ open Fake.Core.TargetOperators
 
 "Clean"
     ==> "InstallClient"
-    ==> "Run"
+    ==> "RunClient"
+
+"Clean"
+    ==> "InstallClient"
+    ==> "RunServer"
 
 Target.runOrDefaultWithArguments "Build"

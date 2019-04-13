@@ -22,6 +22,9 @@ open System.Drawing
 open Fulma
 open Fulma
 open Elmish.Browser.Navigation
+open Fable.Import
+open System
+open Fable.Core
 
 
 
@@ -29,6 +32,14 @@ type Page =
     | Default
     | Home
     | Description
+    | Login
+
+    member x.ToString() =
+        match x with
+        | Default -> "/"
+        | Home -> "/home"
+        | Description -> "/description"
+        | Login -> "/login"
 
 //type Stage = CurrentPage of Page
 
@@ -58,9 +69,10 @@ type Model = {
 
 let route: UrlParser.State<Page->Page> -> UrlParser.State<Page> list =
     UrlParser.oneOf [
-        UrlParser.map Default (UrlParser.s "")
-        UrlParser.map Home (UrlParser.s "home")
-        UrlParser.map Description (UrlParser.s "description")
+        UrlParser.map Default (UrlParser.s "/")
+        UrlParser.map Home (UrlParser.s "/home")
+        UrlParser.map Description (UrlParser.s "/description")
+        UrlParser.map Login (UrlParser.s "/login")
     ]
 
 
@@ -93,15 +105,17 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     | Activation act ->
         let nextModel = {currentModel with IsActive = getNextActive act; }
         nextModel, Cmd.none
-
+    | NavigateTo (Url "/")
     | NavigateTo (Url "/home") ->
         let nextModel = {currentModel with Stage = Home}
         nextModel, Navigation.modifyUrl "/home"
-
     | NavigateTo (Url "/description") ->
         let nextModel = {currentModel with Stage = Description}
         nextModel, Navigation.modifyUrl "/description"
-
+    | NavigateTo (Url "/login") ->
+        let url = ("http://localhost:8085/api/login/" + "http://localhost:8080" + currentModel.Stage.ToString())
+        Browser.window.location.assign url
+        currentModel, Cmd.none
     | _ -> currentModel, Cmd.none
 
 
@@ -136,15 +150,11 @@ let button txt onClick =
 
 let view (model : Model) (dispatch : Msg -> unit) =
 
-    let currentUrl =
-        match model.Stage with
-        | Page.Home -> "/home "
-        | Page.Description -> "/description"
-
     let navItem nextUrl title =
-        Navbar.Item.a [ Navbar.Item.IsHoverable ] [
+        Navbar.Item.a [ ] [
             Button.button [
-                Button.Option.OnClick (fun _ -> dispatch (NavigateTo (Url nextUrl)))
+                Button.Option.OnClick (fun _ ->
+                   dispatch (NavigateTo (Url nextUrl)))
                 Button.IsHovered true
                 Button.Color IsInfo ]
               [ str title ] ]
@@ -184,8 +194,9 @@ let view (model : Model) (dispatch : Msg -> unit) =
                 ]
                 Navbar.End.div [ ]
                   [ Navbar.Item.div [ ]
-                      [ Button.button [ Button.Color IsSuccess ]
-                          [ str "Demo" ] ] ] ]
+                      [ navItem "/login" "Login" ]
+                  ]
+              ]
 
 
           Container.container []
