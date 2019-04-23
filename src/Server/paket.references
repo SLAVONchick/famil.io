@@ -6,3 +6,4 @@ Saturn
 Thoth.Json.Giraffe
 Microsoft.AspNetCore.Authentication.Cookies
 Microsoft.AspNetCore.Authentication.OpenIdConnect
+Auth0.ManagementApi

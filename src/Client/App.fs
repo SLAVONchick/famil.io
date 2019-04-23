@@ -25,6 +25,7 @@ open Elmish.Browser.Navigation
 open Fable.Import
 open System
 open Fable.Core
+open Fable.Import.React
 
 
 
@@ -200,7 +201,9 @@ let view (model : Model) (dispatch : Msg -> unit) =
 
 
           Container.container []
-              [ model.SubView ]
+              [ model.SubView
+                input [ OnChange (fun str -> () )]
+                button "" (fun _ -> ()) ]
 
           Footer.footer [ ]
                 [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]

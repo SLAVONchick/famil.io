@@ -1,4 +1,13 @@
 namespace Server
+open System.Net.Http
+open Auth0.ManagementApi
+
+module Seq =
+  let tryHead s =
+    try
+      s |> Seq.head |> Some
+    with _ ->
+      None
 
 module Startup =
     open System.IO
@@ -24,7 +33,13 @@ module Startup =
 
     let configuration =
         ConfigurationBuilder().AddJsonFile(
-            "/home/viacheslav/repositories/famil.io/src/Server/appsettings.json").Build()
+            //"/home/viacheslav/repositories/famil.io/src/Server/appsettings.json"
+            @"E:\repos\_famil.io\src\Server\appsettings.json").Build()
+
+
+    let auth0Client =
+        new ManagementApiClient(configuration.["Auth0:Token"],
+                                 Uri(configuration.["Auth0:Identifier"]))
 
     let port = "SERVER_PORT" |> tryGetEnv |> Option.map uint16 |> Option.defaultValue 8085us
 
@@ -51,32 +66,37 @@ module Startup =
             })
         getf "/api/login/%s" (fun uri next ctx ->
             task{
-                let! name = ctx.GetTokenAsync("expires_at")
-                let props = AuthenticationProperties(RedirectUri=uri)
+                let props =
+                    AuthenticationProperties(
+                        RedirectUri=(if String.IsNullOrEmpty uri then
+                                        "http://localhost:8085/api/callback"
+                                     else uri))
                 do! login ctx props
-                return! json null next ctx
+                return! json "" next ctx
             })
         getf "/api/logout/%s" (fun uri next ctx ->
             task{
-                let props = AuthenticationProperties(RedirectUri=uri)
+                let props =
+                    AuthenticationProperties(
+                        RedirectUri=(if String.IsNullOrEmpty uri then
+                                        "http://localhost:8085/api/callback"
+                                     else uri))
                 do! logout ctx props
                 return! json null next ctx
             })
-        postf "/api/callback/%s" (fun smth next ctx ->
+        post "/api/callback" (fun next ctx ->
             task {
-                let! name = ctx.ReadBodyFromRequestAsync()
                 return! json null next ctx
             })
-        //get "/api/user" (fun next ctx ->
-        //    task{
-        //        let user =
-        //            if ctx.User.Identity.IsAuthenticated
-        //            then { Name = ctx.User.["name"]
-        //                   Email = ctx.User.Claims.["email"] }
-        //                 |> Some
-        //            else None
-        //        return! json user next ctx
-        //    })
+
+        get "/api/currentuser" (fun next ctx ->
+            task {
+                let user = ctx.User.Claims |> Seq.tryHead
+                let id = user |> function | Some x -> x.Value | None -> ""
+                let! resp =
+                    auth0Client.Users.GetAsync(id, "created_at", false)
+                return! json resp next ctx
+            })
 
     }
 
