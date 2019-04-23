@@ -16,7 +16,7 @@ group Server
     nuget Microsoft.AspNetCore.Authentication.OpenIdConnect
     nuget Npgsql
     nuget Saturn
-    nuget Thoth.Json.Giraffe
+    nuget Thoth.Json.Giraffe 1.1.0
 
 group Client
     source https://api.nuget.org/v3/index.json

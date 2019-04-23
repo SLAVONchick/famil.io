@@ -34,7 +34,7 @@ module Startup =
     let configuration =
         ConfigurationBuilder().AddJsonFile(
             //"/home/viacheslav/repositories/famil.io/src/Server/appsettings.json"
-            @"E:\repos\_famil.io\src\Server\appsettings.json").Build()
+            @"E:\repos\famil.io\src\Server\appsettings.json").Build()
 
 
     let auth0Client =
@@ -72,7 +72,7 @@ module Startup =
                                         "http://localhost:8085/api/callback"
                                      else uri))
                 do! login ctx props
-                return! json "" next ctx
+                return! json null next ctx
             })
         getf "/api/logout/%s" (fun uri next ctx ->
             task{
@@ -94,8 +94,9 @@ module Startup =
                 let user = ctx.User.Claims |> Seq.tryHead
                 let id = user |> function | Some x -> x.Value | None -> ""
                 let! resp =
-                    auth0Client.Users.GetAsync(id, "created_at", false)
-                return! json resp next ctx
+                    auth0Client.Users.GetAsync(id, "user_id,nickname,email", true)
+                let user = { Id = resp.UserId; Nickname = resp.NickName; Email = resp.Email }
+                return! json user next ctx
             })
 
     }

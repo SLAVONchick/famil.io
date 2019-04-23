@@ -1,12 +1,10 @@
 module Client
 
-module UrlParser = Elmish.Browser.UrlParser
+open Elmish.Browser.UrlParser
 
 open Elmish
 open Elmish.React
 
-open Fable.Helpers.React
-open Fable.Helpers.React.Props
 open Fable.PowerPack.Fetch
 
 open Thoth.Json
@@ -30,14 +28,14 @@ open Fable.Import.React
 
 
 type Page =
-    | Default
+    | DefaultPage
     | Home
     | Description
     | Login
 
     member x.ToString() =
         match x with
-        | Default -> "/"
+        | DefaultPage -> "/"
         | Home -> "/home"
         | Description -> "/description"
         | Login -> "/login"
@@ -63,23 +61,27 @@ type Model = {
 
              member this.SubView =
                 match this.Stage with
-                | Default
+                | DefaultPage
                 | Home -> Home.view
                 | Description -> Description.view
 
 
-let route: UrlParser.State<Page->Page> -> UrlParser.State<Page> list =
-    UrlParser.oneOf [
-        UrlParser.map Default (UrlParser.s "/")
-        UrlParser.map Home (UrlParser.s "/home")
-        UrlParser.map Description (UrlParser.s "/description")
-        UrlParser.map Login (UrlParser.s "/login")
+let route =
+    oneOf [
+        map DefaultPage (s "/" )
+        map Home (s "/home" )
+        map Description (s "/description")
+        map Login (s "/login")
     ]
+
+
+open Fable.Helpers.React
+open Fable.Helpers.React.Props
 
 
 let urlUpdate (result: Page option) model =
     match result with
-    | Some Default
+    | Some DefaultPage
     | Some (Home) ->
         {model with Stage = result.Value}, Cmd.none
     | Some Description ->
@@ -215,7 +217,7 @@ open Elmish.HMR
 #endif
 
 Program.mkProgram init update view
-|> Program.toNavigable (UrlParser.parsePath route) urlUpdate
+|> Program.toNavigable (parsePath route) urlUpdate
 #if DEBUG
 |> Program.withConsoleTrace
 |> Program.withHMR
