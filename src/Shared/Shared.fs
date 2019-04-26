@@ -4,10 +4,10 @@ type Counter = { Value : int }
 
 
 type User =
-    { Id: string
-      Nickname: string
-      Email: string }
+    { Id: string option
+      Nickname: string option
+      Email: string option}
 
 type UserType =
   | Authorized of User
-  | NotAuuthorized
+  | NotAuthorized

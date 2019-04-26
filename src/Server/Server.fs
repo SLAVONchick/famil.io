@@ -34,7 +34,7 @@ module Startup =
     let configuration =
         ConfigurationBuilder().AddJsonFile(
             //"/home/viacheslav/repositories/famil.io/src/Server/appsettings.json"
-            @"E:\repos\famil.io\src\Server\appsettings.json").Build()
+            @"C:\Users\1\RiderProjects\famil.io\src\Server\appsettings.json").Build()
 
 
     let auth0Client =
@@ -95,7 +95,7 @@ module Startup =
                 let id = user |> function | Some x -> x.Value | None -> ""
                 let! resp =
                     auth0Client.Users.GetAsync(id, "user_id,nickname,email", true)
-                let user = { Id = resp.UserId; Nickname = resp.NickName; Email = resp.Email }
+                let user = { Id = resp.UserId |> Some; Nickname = resp.NickName |> Some ; Email = resp.Email |> Some }
                 return! json user next ctx
             })
 
