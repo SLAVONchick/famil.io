@@ -9,40 +9,81 @@ open Fable.PowerPack.Fetch
 open Shared
 open Thoth.Json
 open Fulma
+open System.Net.Http.Headers
+open Fable.PowerPack.Fetch.Fetch_types
+open Elmish.Browser
+open Fable.Import
 
-type Model =
-  { User: User option }
+let mutable isAuthorized = false
 
-type Msg =
-  | Authorized of User
-  | NotAuthorized of exn
+type UserStatus =
+    | Authorized of User
+    | NotAuthorized of exn
 
-let getUser() = fetchAs<User> "/api/currentuser" (Decode.Auto.generateDecoder())
+type State = 
+    | Initial 
+    | Loading 
+    | Loaded of UserStatus 
+
+type Msg = 
+    | StartLoading
+    | LoadedData  of UserStatus 
+    | Reset 
+
+
+let getUser () : Cmd<Msg> = 
+    let res() = fetchAs<User> "/api/currentuser" (Decode.Auto.generateDecoder())
+    let cmd = 
+      Cmd.ofPromise
+        (res())
+        []
+        (Authorized >> LoadedData)
+        (NotAuthorized >> LoadedData)      
+    cmd
+
+
+let update msg state =
+    match msg with
+    | StartLoading ->
+        let nextState = Loading
+        let nextCmd = getUser()
+        nextState, nextCmd
+    | LoadedData u ->
+        let nextState = Loaded u
+        nextState, Cmd.none
+    | Reset ->
+        State.Initial, Cmd.none
+  
+
 
 // defines the initial state and initial command (= side-effect) of the application
-let init () : Model * Cmd<Msg> =
-    let initialModel = { User = None }
-    let u = getUser () [ RequestProperties.Method HttpMethod.GET ]
-    let str = u
-    printfn "AHAHAHAHAHAHAHAHA %A" str
-    let loadCountCmd =
-        Cmd.ofPromise
-            (getUser ())
-            [ RequestProperties.Mode RequestMode.Sameorigin ]
-            Authorized
-            NotAuthorized
-    initialModel, loadCountCmd
+let init () : State * Cmd<Msg> = State.Initial, Cmd.none
 
-let view user =
-  match user with
-  | None -> div [] []
-  | Some u -> div [] [
-          Column.column [] [
-              div [] [ b [] [ str "Nickname:" ] ]
-              div [] [ b [] [ str "Email:" ] ]
-          ]
-          Column.column [] [
-              div [] [ b [] [ str (u.Nickname |> Option.defaultValue "")] ]
-              div [] [ b [] [ str (u.Email |> Option.defaultValue "") ] ]
+let authorizationStateView us =
+  match us with
+  | NotAuthorized _ -> 
+      isAuthorized <- false
+      div [] []
+  | Authorized u -> 
+      isAuthorized <- true
+      div [] [
+        div [] [
+          Column.column [] [ str "Nickname: "]
+          Column.column [] [ str (u.Nickname |> Option.defaultValue "")]
         ]
-    ]
+        div [] [
+          Column.column [] [ str "Email: "]
+          Column.column [] [ str (u.Email |> Option.defaultValue "")]
+        ]
+       ]
+
+
+let view state dispatch =
+  match state with
+  | Initial -> 
+       dispatch StartLoading
+       div [] []
+  | Loading ->
+       div [] []
+  | Loaded us -> 
+      authorizationStateView us

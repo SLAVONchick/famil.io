@@ -24,6 +24,7 @@ open Fable.Import
 open System
 open Fable.Core
 open Fable.Import.React
+open Fable.Helpers.React.ReactiveComponents
 
 
 
@@ -54,21 +55,22 @@ type Activation =
 type Msg =
     | Activation of Activation
     | NavigateTo of Url
+    | AccountMsg of Account.Msg
 
 type Model =
     { Stage : Page
       IsActive : bool
-      User: User option }
+      Account: Account.State }
 
     member __.Activation = if __.IsActive then Deactivate else Activate
 
-    member this.SubView =
+    member this.SubView getEl =
           match this.Stage with
           | DefaultPage
           | Login
           | Home -> Home.view()
           | Description -> Description.view()
-          | Account -> Account.view this.User
+          | Account -> getEl()
 
 
 let route =
@@ -87,21 +89,24 @@ open Fable.Helpers.React.Props
 
 let urlUpdate (result: Page option) model =
     match result with
+    | Some Description ->
+        {model with Stage = result.Value}, Navigation.modifyUrl "/account"
+    | Some Account ->
+        {model with Stage = result.Value}, Navigation.modifyUrl "/account"
     | Some DefaultPage
     | Some (Home) ->
-        {model with Stage = result.Value}, Cmd.none
-    | Some Description ->
-        {model with Stage = result.Value}, Cmd.none
-    | Some Account ->
-        {model with Stage = result.Value}, Cmd.none
-    | _ -> model, Cmd.none
+        {model with Stage = result.Value},  Navigation.modifyUrl "/home"
+    | _ -> model,  Navigation.modifyUrl "/home"
 
 
 let init page: Model * Cmd<Msg> =
-    let (u) = Account.init()
-    let initialModel = { IsActive = false; Stage = Home; User = None }
+    let inittialAccountState, initialAccountCmd = Account.init()
+    let initialModel = { IsActive = false; Stage = Home; Account = inittialAccountState }
     let initialCmd =
-        Cmd.ofMsg(NavigateTo(Url "/home"))
+        Cmd.batch [
+          Cmd.map NavigateTo (Cmd.ofMsg(Url "/home"))
+          Cmd.map AccountMsg initialAccountCmd
+        ]
     initialModel, initialCmd
 
 
@@ -111,25 +116,38 @@ let getNextActive act =
     match act with
     | Activate ->  true
     | Deactivate -> false
+let login model = 
+    let url = ("http://localhost:8085/api/login/" + "http://localhost:8080" + model.Stage.ToString())
+    Browser.window.location.assign url
+    model, Cmd.none
 
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     match msg with
     | Activation act ->
         let nextModel = {currentModel with IsActive = getNextActive act; }
         nextModel, Cmd.none
-    | NavigateTo (Url "/description") ->
-        let nextModel = {currentModel with Stage = Description}
-        nextModel, Navigation.modifyUrl "/description"
-    | NavigateTo (Url "/login") ->
-        let url = ("http://localhost:8085/api/login/" + "http://localhost:8080" + currentModel.Stage.ToString())
-        Browser.window.location.assign url
-        currentModel, Cmd.none
-    | NavigateTo (Url "/account") ->
-        let nextModel = {currentModel with Stage = Account}
-        nextModel, Navigation.modifyUrl "/account"
-    | _ ->
-        let nextModel = {currentModel with Stage = Home}
-        nextModel, Navigation.modifyUrl "/home"
+    | NavigateTo u -> 
+        match u with 
+        | (Url "/description") ->
+            let nextModel = {currentModel with Stage = Description}
+            nextModel, Navigation.modifyUrl "/description"
+        | (Url "/account") ->
+            match currentModel.Account with
+            | Account.State.Initial -> login currentModel
+            | Account.State.Loading -> currentModel, Cmd.none
+            | Account.State.Loaded us -> 
+                match us with 
+                | Account.UserStatus.NotAuthorized _ -> login currentModel
+                | Account.UserStatus.Authorized _ -> 
+                    let nextModel = {currentModel with Stage = Account}
+                    nextModel, Navigation.modifyUrl "/account"
+        | _ ->
+            let nextModel = {currentModel with Stage = Home}
+            nextModel, Navigation.modifyUrl "/home"
+    | AccountMsg a ->
+        let nextAccountState, nextAccountCmd = Account.update a currentModel.Account
+        let nextModel = { currentModel with Account = nextAccountState}
+        nextModel, Cmd.map AccountMsg nextAccountCmd
 
 
 let safeComponents =
@@ -165,17 +183,19 @@ let navItem nextUrl title dispatch =
                 Button.IsHovered true
                 Button.Color IsInfo ]
               [ str title ]
-
-let logInOrOut dispatch user =
-    match user with
-    | Some _ ->
+              
+let logInOrOut dispatch =
+    match Account.isAuthorized with
+    | true ->
         Navbar.Item.a [ Navbar.Item.Option.HasDropdown ] [
             navItem "/account" "More" dispatch
             navItem "/logout" "Logout" dispatch
         ]
-    | None -> Navbar.Item.a [ ] [
-        navItem "/login" "Login" dispatch
-    ]
+    | false -> 
+        //if not loadingStarted then dispatch (AccountMsg Account.Msg.StartLoading) else loadingStarted <- true
+        Navbar.Item.a [ ] [
+            navItem "/login" "Login" dispatch 
+        ]
 
 
 let view (model : Model) (dispatch : Msg -> unit) =
@@ -215,10 +235,10 @@ let view (model : Model) (dispatch : Msg -> unit) =
                 ]
                 Navbar.End.div [ ]
                   [ Navbar.Item.div [ ]
-                      [ logInOrOut dispatch model.User ]
+                      [ logInOrOut dispatch ]
                   ]
               ]
-          model.SubView
+          model.SubView (fun () -> div [ ] [ ] )
           Footer.footer [ ]
                 [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
                     [ safeComponents ] ] ]

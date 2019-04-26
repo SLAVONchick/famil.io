@@ -91,6 +91,7 @@ module Startup =
 
         get "/api/currentuser" (fun next ctx ->
             task {
+                ctx.SetHttpHeader "Access-Control-Allow-Origin" "*"
                 let user = ctx.User.Claims |> Seq.tryHead
                 let id = user |> function | Some x -> x.Value | None -> ""
                 let! resp =
