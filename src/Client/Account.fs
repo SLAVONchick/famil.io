@@ -20,29 +20,29 @@ type UserStatus =
     | Authorized of User
     | NotAuthorized of exn
 
-type State = 
-    | Initial 
-    | Loading 
-    | Loaded of UserStatus 
+type State =
+    | Initial
+    | Loading
+    | Loaded of UserStatus
 
-type Msg = 
+type Msg =
     | StartLoading
-    | LoadedData  of UserStatus 
-    | Reset 
+    | LoadedData  of UserStatus
+    | Reset
 
 
-let getUser () : Cmd<Msg> = 
+let getUser () : Cmd<Msg> =
     let res() = fetchAs<User> "/api/currentuser" (Decode.Auto.generateDecoder())
-    let cmd = 
+    let cmd =
       Cmd.ofPromise
         (res())
         []
         (Authorized >> LoadedData)
-        (NotAuthorized >> LoadedData)      
+        (NotAuthorized >> LoadedData)
     cmd
 
 
-let update msg state =
+let update state msg =
     match msg with
     | StartLoading ->
         let nextState = Loading
@@ -53,7 +53,7 @@ let update msg state =
         nextState, Cmd.none
     | Reset ->
         State.Initial, Cmd.none
-  
+
 
 
 // defines the initial state and initial command (= side-effect) of the application
@@ -61,29 +61,40 @@ let init () : State * Cmd<Msg> = State.Initial, Cmd.none
 
 let authorizationStateView us =
   match us with
-  | NotAuthorized _ -> 
+  | NotAuthorized _ ->
       isAuthorized <- false
       div [] []
-  | Authorized u -> 
+  | Authorized u ->
       isAuthorized <- true
       div [] [
         div [] [
-          Column.column [] [ str "Nickname: "]
-          Column.column [] [ str (u.Nickname |> Option.defaultValue "")]
+          Column.column [] [ b [ ] [ str "Nickname: " ]
+                             str (u.Nickname |> Option.defaultValue "")]
         ]
         div [] [
-          Column.column [] [ str "Email: "]
-          Column.column [] [ str (u.Email |> Option.defaultValue "")]
+          Column.column [] [ b [ ] [ str "Email: " ]
+                             str (u.Email |> Option.defaultValue "")]
         ]
        ]
 
 
+let loginButton getButton dispatch state =
+    match state with
+    | Initial
+    | Loading ->
+        getButton "#login" "Login" dispatch
+    | Loaded us ->
+        match us with
+        | Authorized _ -> getButton "#logout" "Logout" dispatch
+        | NotAuthorized _ -> getButton "#login" "Login" dispatch
+
+
 let view state dispatch =
   match state with
-  | Initial -> 
+  | Initial ->
        dispatch StartLoading
        div [] []
   | Loading ->
        div [] []
-  | Loaded us -> 
+  | Loaded us ->
       authorizationStateView us

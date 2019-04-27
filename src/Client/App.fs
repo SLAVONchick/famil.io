@@ -32,16 +32,14 @@ type Page =
     | DefaultPage
     | Home
     | Description
-    | Login
     | Account
 
     override x.ToString() =
         match x with
-        | DefaultPage -> "/"
-        | Home -> "/home"
-        | Description -> "/description"
-        | Login -> "/login"
-        | Account -> "/account"
+        | DefaultPage -> "/#"
+        | Home -> "/#home"
+        | Description -> "/#description"
+        | Account -> "/#account"
 
 //type Stage = CurrentPage of Page
 
@@ -67,7 +65,6 @@ type Model =
     member this.SubView getEl =
           match this.Stage with
           | DefaultPage
-          | Login
           | Home -> Home.view()
           | Description -> Description.view()
           | Account -> getEl()
@@ -75,11 +72,10 @@ type Model =
 
 let route =
     oneOf [
-        map DefaultPage (s "/" </> top)
-        map Home (s "/home" </> top)
-        map Description (s "/description" </> top)
-        map Login (s "/login" </> top)
-        map Account (s "/account" </> top)
+        map DefaultPage (s "" </> top)
+        map Home (s "home" </> top)
+        map Description (s "description" </> top)
+        map Account (s " account" </> top)
     ]
 
 
@@ -90,13 +86,13 @@ open Fable.Helpers.React.Props
 let urlUpdate (result: Page option) model =
     match result with
     | Some Description ->
-        {model with Stage = result.Value}, Navigation.modifyUrl "/account"
+        {model with Stage = result.Value}, Navigation.modifyUrl "#description"
     | Some Account ->
-        {model with Stage = result.Value}, Navigation.modifyUrl "/account"
+        {model with Stage = result.Value}, Navigation.modifyUrl "#account"
     | Some DefaultPage
     | Some (Home) ->
-        {model with Stage = result.Value},  Navigation.modifyUrl "/home"
-    | _ -> model,  Navigation.modifyUrl "/home"
+        {model with Stage = result.Value},  Navigation.modifyUrl "#home"
+    | None -> {model with Stage = Home},  Navigation.modifyUrl "#home"
 
 
 let init page: Model * Cmd<Msg> =
@@ -104,7 +100,7 @@ let init page: Model * Cmd<Msg> =
     let initialModel = { IsActive = false; Stage = Home; Account = inittialAccountState }
     let initialCmd =
         Cmd.batch [
-          Cmd.map NavigateTo (Cmd.ofMsg(Url "/home"))
+          Cmd.map NavigateTo (Cmd.ofMsg(Url "#home"))
           Cmd.map AccountMsg initialAccountCmd
         ]
     initialModel, initialCmd
@@ -116,8 +112,13 @@ let getNextActive act =
     match act with
     | Activate ->  true
     | Deactivate -> false
-let login model = 
-    let url = ("http://localhost:8085/api/login/" + "http://localhost:8080" + model.Stage.ToString())
+
+let logInOrOut inOrOut model =
+    let url =
+        ("http://localhost:8085/api/" +
+         (if inOrOut then "login"
+         else "logout") +
+         "/http://localhost:8080" + model.Stage.ToString())
     Browser.window.location.assign url
     model, Cmd.none
 
@@ -126,26 +127,23 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     | Activation act ->
         let nextModel = {currentModel with IsActive = getNextActive act; }
         nextModel, Cmd.none
-    | NavigateTo u -> 
-        match u with 
-        | (Url "/description") ->
+    | NavigateTo u ->
+        match u with
+        | (Url "#description") ->
             let nextModel = {currentModel with Stage = Description}
-            nextModel, Navigation.modifyUrl "/description"
-        | (Url "/account") ->
-            match currentModel.Account with
-            | Account.State.Initial -> login currentModel
-            | Account.State.Loading -> currentModel, Cmd.none
-            | Account.State.Loaded us -> 
-                match us with 
-                | Account.UserStatus.NotAuthorized _ -> login currentModel
-                | Account.UserStatus.Authorized _ -> 
-                    let nextModel = {currentModel with Stage = Account}
-                    nextModel, Navigation.modifyUrl "/account"
+            nextModel, Navigation.modifyUrl "#description"
+        | (Url "#login") ->
+            logInOrOut true currentModel
+        | (Url "#logout") ->
+            logInOrOut false currentModel
+        | (Url "#account") ->
+            let nextModel = {currentModel with Stage = Account}
+            nextModel, Navigation.modifyUrl "#account"
         | _ ->
             let nextModel = {currentModel with Stage = Home}
-            nextModel, Navigation.modifyUrl "/home"
+            nextModel, Navigation.modifyUrl "#home"
     | AccountMsg a ->
-        let nextAccountState, nextAccountCmd = Account.update a currentModel.Account
+        let nextAccountState, nextAccountCmd = Account.update currentModel.Account a
         let nextModel = { currentModel with Account = nextAccountState}
         nextModel, Cmd.map AccountMsg nextAccountCmd
 
@@ -183,25 +181,12 @@ let navItem nextUrl title dispatch =
                 Button.IsHovered true
                 Button.Color IsInfo ]
               [ str title ]
-              
-let logInOrOut dispatch =
-    match Account.isAuthorized with
-    | true ->
-        Navbar.Item.a [ Navbar.Item.Option.HasDropdown ] [
-            navItem "/account" "More" dispatch
-            navItem "/logout" "Logout" dispatch
-        ]
-    | false -> 
-        //if not loadingStarted then dispatch (AccountMsg Account.Msg.StartLoading) else loadingStarted <- true
-        Navbar.Item.a [ ] [
-            navItem "/login" "Login" dispatch 
-        ]
 
 
 let view (model : Model) (dispatch : Msg -> unit) =
     div []
         [
-          Navbar.navbar [ ]
+          yield Navbar.navbar [ ]
               [ Navbar.Brand.div [ ]
                   [ Navbar.Item.a [ ]
                       [ img [ Style [ Width "2.5em" ]
@@ -230,26 +215,33 @@ let view (model : Model) (dispatch : Msg -> unit) =
                         Modifier.TextColor Color.IsBlack ]
                     Navbar.Menu.Option.CustomClass (if model.IsActive then "is-active" else "")
                 ] [
-                navItem "/home" "Home" dispatch
-                navItem "/description" "Description" dispatch
+                navItem "#home" "Home" dispatch
+                navItem "#description" "Description" dispatch
+                navItem "#account" "Account" dispatch
                 ]
                 Navbar.End.div [ ]
                   [ Navbar.Item.div [ ]
-                      [ logInOrOut dispatch ]
+                      [ Account.loginButton navItem dispatch model.Account ]
                   ]
               ]
-          model.SubView (fun () -> div [ ] [ ] )
-          Footer.footer [ ]
+          match model.Stage with
+          | DefaultPage
+          | Home -> yield Home.view ()
+          | Description -> yield Description.view ()
+          | Account ->
+              yield Account.view model.Account (AccountMsg >> dispatch)
+
+          yield Footer.footer [ ]
                 [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
                     [ safeComponents ] ] ]
 
 #if DEBUG
 open Elmish.Debug
-open Elmish.HMR
 #endif
+open Elmish.HMR
 
 Program.mkProgram init update view
-|> Program.toNavigable (parsePath route) urlUpdate
+|> Program.toNavigable (parseHash route) urlUpdate
 #if DEBUG
 |> Program.withConsoleTrace
 |> Program.withHMR
