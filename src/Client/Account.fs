@@ -14,7 +14,6 @@ open Fable.PowerPack.Fetch.Fetch_types
 open Elmish.Browser
 open Fable.Import
 
-let mutable isAuthorized = false
 
 type UserStatus =
     | Authorized of User
@@ -62,10 +61,8 @@ let init () : State * Cmd<Msg> = State.Initial, Cmd.none
 let authorizationStateView us =
   match us with
   | NotAuthorized _ ->
-      isAuthorized <- false
       div [] []
   | Authorized u ->
-      isAuthorized <- true
       div [] [
         div [] [
           Column.column [] [ b [ ] [ str "Nickname: " ]
@@ -92,7 +89,6 @@ let loginButton getButton dispatch state =
 let view state dispatch =
   match state with
   | Initial ->
-       dispatch StartLoading
        div [] []
   | Loading ->
        div [] []

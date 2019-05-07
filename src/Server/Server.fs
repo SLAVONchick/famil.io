@@ -1,6 +1,14 @@
 namespace Server
+open System.Collections.Generic
 open System.Net.Http
 open Auth0.ManagementApi
+open LinqToDB.Configuration
+open LinqToDB.Data
+open LinqToDB.Linq
+open System.Collections.Generic
+open System.Linq
+open Server.Db
+open Shared.Dto
 
 module Seq =
   let tryHead s =
@@ -101,9 +109,38 @@ module Startup =
                 return! json user next ctx
             })
 
+        getf "/api/groups/%s" (fun userId next ctx ->
+            task {
+                use db = new DbFamilio()
+                let groups =
+                    query {
+                        for g in db.Groups do
+                            where (g.CreatedBy = userId)
+                            select g
+                    }
+                let res =
+                    groups.ToArray()
+                    |> Array.filter (fun g -> Option.isNone g.DeletedAt && Option.isNone g.DeletedBy)
+                    |> Array.map (fun g ->
+                        { Id = g.Id
+                          Name = g.Name
+                          CreatedAt = g.CreatedAt
+                          CreatedBy = g.CreatedBy
+                          DeletedBy = g.DeletedBy
+                          DeletedAt = g.DeletedAt })
+                return! json res next ctx
+            })
+
     }
 
     let configureSerialization (services:IServiceCollection) =
+        let settings = seq {
+            yield ConnectionStringSettings(configuration.["ConnectionStrings:familio"], Db.dbName)
+            :> IConnectionStringSettings
+        }
+        let providers = System.Linq.Enumerable.Empty<IDataProviderSettings>()
+        let postgre = LinqToDB.ProviderName.PostgreSQL
+        DataConnection.DefaultSettings <- DbSettings(providers, postgre, postgre, settings)
         services.AddSingleton<Giraffe.Serialization.Json.IJsonSerializer>(Thoth.Json.Giraffe.ThothSerializer())
         |> ignore
         services.AddAuthentication(fun o ->

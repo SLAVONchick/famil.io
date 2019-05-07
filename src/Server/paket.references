@@ -9,3 +9,4 @@ Microsoft.AspNetCore.Authentication.OpenIdConnect
 Auth0.ManagementApi
 Thoth.Json
 Thoth.Json.Net
+Npgsql

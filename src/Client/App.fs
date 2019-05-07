@@ -75,7 +75,7 @@ let route =
         map DefaultPage (s "" </> top)
         map Home (s "home" </> top)
         map Description (s "description" </> top)
-        map Account (s " account" </> top)
+        map Account (s "account" </> top)
     ]
 
 
@@ -186,6 +186,15 @@ let navItem nextUrl title dispatch =
 let view (model : Model) (dispatch : Msg -> unit) =
     div []
         [
+          yield (
+           match model.Account with
+           | Account.Initial ->
+               dispatch (Account.StartLoading |> AccountMsg)
+               div [] []
+           | Account.Loading ->
+               div [] []
+           | Account.Loaded _ ->
+               div [] [])
           yield Navbar.navbar [ ]
               [ Navbar.Brand.div [ ]
                   [ Navbar.Item.a [ ]
@@ -215,9 +224,9 @@ let view (model : Model) (dispatch : Msg -> unit) =
                         Modifier.TextColor Color.IsBlack ]
                     Navbar.Menu.Option.CustomClass (if model.IsActive then "is-active" else "")
                 ] [
-                navItem "#home" "Home" dispatch
-                navItem "#description" "Description" dispatch
-                navItem "#account" "Account" dispatch
+                Navbar.Item.a [] [ navItem "#home" "Home" dispatch ]
+                Navbar.Item.a [] [ navItem "#description" "Description" dispatch ]
+                Navbar.Item.a [] [ navItem "#account" "Account" dispatch ]
                 ]
                 Navbar.End.div [ ]
                   [ Navbar.Item.div [ ]
@@ -226,8 +235,10 @@ let view (model : Model) (dispatch : Msg -> unit) =
               ]
           match model.Stage with
           | DefaultPage
-          | Home -> yield Home.view ()
-          | Description -> yield Description.view ()
+          | Home ->
+              yield Home.view ()
+          | Description ->
+              yield Description.view ()
           | Account ->
               yield Account.view model.Account (AccountMsg >> dispatch)
 
