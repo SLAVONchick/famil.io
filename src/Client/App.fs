@@ -1,4 +1,4 @@
-module Client
+module Client.App
 
 open Elmish.Browser.UrlParser
 open Elmish
