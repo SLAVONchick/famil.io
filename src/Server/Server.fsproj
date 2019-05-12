@@ -10,5 +10,11 @@
     <Compile Include="Db.fs" />
     <Compile Include="Server.fs" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Update="appsettings.json">
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>
