@@ -40,6 +40,26 @@ let getUser () : Cmd<Msg> =
         (NotAuthorized >> LoadedData)
     cmd
 
+let authWith (state:State) whenAuth whenNotAuth =
+    match state with
+    | Loaded us ->
+        whenAuth us
+    | _ -> whenNotAuth
+
+let isAuthorized (state:State) =
+    authWith state (fun us ->
+        match us with
+        | Authorized _ -> true
+        | _ -> false)
+        false
+
+let getUserId (state:State) =
+    let whenNotAuth = None
+    authWith state (fun us ->
+        match us with
+        | Authorized u -> u.Id
+        | _ -> whenNotAuth )
+        whenNotAuth
 
 let update state msg =
     match msg with

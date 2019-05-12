@@ -9,6 +9,8 @@ open System.Collections.Generic
 open System.Linq
 open Server.Db
 open Shared.Dto
+open LinqToDB
+open Thoth.Json.Net
 
 module Seq =
   let tryHead s =
@@ -66,7 +68,7 @@ module Startup =
                 return ()
             }
 
-
+    open Server.Tables
     let webApp = router {
         get "/api/init" (fun next ctx ->
             task {
@@ -114,21 +116,49 @@ module Startup =
                 use db = new DbFamilio()
                 let groups =
                     query {
-                        for g in db.Groups do
-                            where (g.CreatedBy = userId)
-                            select g
+                        for urg in db.UsersRolesGroups do
+                            join g in db.Groups on (urg.GroupId = g.Id)
+                            where (urg.UserId = userId)
+                            groupBy g
                     }
                 let res =
                     groups.ToArray()
-                    |> Array.filter (fun g -> Option.isNone g.DeletedAt && Option.isNone g.DeletedBy)
+                    |> Array.filter (fun g -> Option.isNone g.Key.DeletedAt && Option.isNone g.Key.DeletedBy)
                     |> Array.map (fun g ->
-                        { Id = g.Id
-                          Name = g.Name
-                          CreatedAt = g.CreatedAt
-                          CreatedBy = g.CreatedBy
-                          DeletedBy = g.DeletedBy
-                          DeletedAt = g.DeletedAt })
+                        { Id = g.Key.Id
+                          Name = g.Key.Name
+                          CreatedAt = g.Key.CreatedAt
+                          CreatedBy = g.Key.CreatedBy
+                          DeletedBy = g.Key.DeletedBy
+                          DeletedAt = g.Key.DeletedAt })
                 return! json res next ctx
+            })
+
+        post "/api/group" (fun next ctx ->
+            task {
+                let! body = ctx.ReadBodyFromRequestAsync()
+                let res = Decode.Auto.fromString<GroupDto> body
+                let group =
+                    match res with
+                    | Error _ -> raise <| InvalidOperationException("")
+                    | Ok g -> g
+                use db = new DbFamilio()
+                let newGroup =
+                    { Id = 0L
+                      Name = group.Name
+                      CreatedAt = group.CreatedAt
+                      CreatedBy = group.CreatedBy
+                      DeletedAt = group.DeletedAt
+                      DeletedBy = group.DeletedBy }
+                use! tran =  db.BeginTransactionAsync()
+                let! insertedGroupId = db.InsertWithInt64IdentityAsync(newGroup)
+                let urg =
+                    { UserId = newGroup.CreatedBy
+                      GroupId = insertedGroupId
+                      RoleId = (Roles.Admin |> int) }
+                let inserted = db.Insert(urg)
+                do! tran.CommitAsync()
+                return! json insertedGroupId next ctx
             })
 
     }

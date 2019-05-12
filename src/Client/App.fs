@@ -1,45 +1,40 @@
 module Client
 
 open Elmish.Browser.UrlParser
-
 open Elmish
 open Elmish.React
-
-open Fable.PowerPack.Fetch
-
-open Thoth.Json
-
-open Shared
-open Home
-
-
 open Fulma
-open Fable.Helpers
 open Fable.Import
-open System.Drawing
-open Fulma
-open Fulma
 open Elmish.Browser.Navigation
-open Fable.Import
-open System
-open Fable.Core
-open Fable.Import.React
-open Fable.Helpers.React.ReactiveComponents
+open Client.Common
+open System.Text.RegularExpressions
 
+let regex = Regex(@"(?<name>\#group/)(?<value>\d{19})")
 
+let isGroup = regex.IsMatch
+
+let tryGetGroupId input =
+    let matches = regex.Matches(input)
+    match System.Int64.TryParse matches.[1].Value with
+    | true, v -> Some v
+    | _ -> None
 
 type Page =
     | DefaultPage
     | Home
     | Description
     | Account
+    | Groups
+    | Group of int64
 
     override x.ToString() =
         match x with
-        | DefaultPage -> "/#"
-        | Home -> "/#home"
-        | Description -> "/#description"
-        | Account -> "/#account"
+        | DefaultPage -> "#"
+        | Home -> "#home"
+        | Description -> "#description"
+        | Account -> "#account"
+        | Groups -> "#groups"
+        | Group id -> sprintf "#group/%d" id
 
 //type Stage = CurrentPage of Page
 
@@ -54,20 +49,24 @@ type Msg =
     | Activation of Activation
     | NavigateTo of Url
     | AccountMsg of Account.Msg
+    | GroupsMsg of Groups.Msg
+    | GroupMsg of Client.Group.Msg
 
 type Model =
     { Stage : Page
       IsActive : bool
-      Account: Account.State }
+      Account: Account.State
+      Groups: Groups.State
+      Group: Client.Group.State }
 
     member __.Activation = if __.IsActive then Deactivate else Activate
 
-    member this.SubView getEl =
-          match this.Stage with
-          | DefaultPage
-          | Home -> Home.view()
-          | Description -> Description.view()
-          | Account -> getEl()
+    //member this.SubView getEl =
+    //      match this.Stage with
+    //      | DefaultPage
+    //      | Home -> Home.view()
+    //      | Description -> Description.view()
+    //      | Account -> getEl()
 
 
 let route =
@@ -76,32 +75,40 @@ let route =
         map Home (s "home" </> top)
         map Description (s "description" </> top)
         map Account (s "account" </> top)
+        map Groups (s "groups" </> top)
+        map Group (s "group/" </> i64)
     ]
 
 
+open System
 open Fable.Helpers.React
 open Fable.Helpers.React.Props
 
 
 let urlUpdate (result: Page option) model =
     match result with
-    | Some Description ->
-        {model with Stage = result.Value}, Navigation.modifyUrl "#description"
-    | Some Account ->
-        {model with Stage = result.Value}, Navigation.modifyUrl "#account"
-    | Some DefaultPage
-    | Some (Home) ->
-        {model with Stage = result.Value},  Navigation.modifyUrl "#home"
-    | None -> {model with Stage = Home},  Navigation.modifyUrl "#home"
+    | Some _ ->
+        {model with Stage = result.Value},  Navigation.modifyUrl (result.Value.ToString())
+    | None ->
+        {model with Stage = Home},  Navigation.modifyUrl (Page.Home.ToString())
 
 
-let init page: Model * Cmd<Msg> =
-    let inittialAccountState, initialAccountCmd = Account.init()
-    let initialModel = { IsActive = false; Stage = Home; Account = inittialAccountState }
+let init (page: Page option): Model * Cmd<Msg> =
+    let initialAccountState, initialAccountCmd = Account.init()
+    let initialGroupsState, initialGroupsCmd = Groups.init()
+    let initialGroupState, initialGroupCmd = Client.Group.init()
+    let initialModel =
+        { IsActive = false
+          Stage = Home
+          Account = initialAccountState
+          Groups = initialGroupsState
+          Group = initialGroupState }
     let initialCmd =
         Cmd.batch [
-          Cmd.map NavigateTo (Cmd.ofMsg(Url "#home"))
+          Cmd.map NavigateTo (Cmd.ofMsg(Url ((page |> Option.defaultValue Home).ToString())))
           Cmd.map AccountMsg initialAccountCmd
+          Cmd.map GroupsMsg initialGroupsCmd
+          Cmd.map GroupMsg initialGroupCmd
         ]
     initialModel, initialCmd
 
@@ -139,6 +146,16 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
         | (Url "#account") ->
             let nextModel = {currentModel with Stage = Account}
             nextModel, Navigation.modifyUrl "#account"
+        | (Url "#groups") ->
+            let nextModel = {currentModel with Stage = Groups}
+            nextModel, Navigation.modifyUrl "#groups"
+        | Url v  when v |> isGroup ->
+            let v =
+                match tryGetGroupId v with
+                | Some id -> id
+                | None -> raise <| InvalidOperationException("Wrong group id!")
+            let nextModel = {currentModel with Stage = Group v}
+            nextModel, Navigation.modifyUrl (nextModel.Stage.ToString())
         | _ ->
             let nextModel = {currentModel with Stage = Home}
             nextModel, Navigation.modifyUrl "#home"
@@ -146,6 +163,14 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
         let nextAccountState, nextAccountCmd = Account.update currentModel.Account a
         let nextModel = { currentModel with Account = nextAccountState}
         nextModel, Cmd.map AccountMsg nextAccountCmd
+    | GroupsMsg gs ->
+        let nextGroupsState, nextGroupsCmd = Groups.update currentModel.Groups gs
+        let nextModel = {currentModel with Groups = nextGroupsState}
+        nextModel, Cmd.map GroupsMsg nextGroupsCmd
+    | GroupMsg g ->
+        let nextGroupState, nextGroupCmd = Client.Group.update currentModel.Group g
+        let nextModel = {currentModel with Group = nextGroupState}
+        nextModel, Cmd.map GroupMsg nextGroupCmd
 
 
 let safeComponents =
@@ -167,23 +192,11 @@ let safeComponents =
           components ]
 
 
-let button txt onClick =
-    Button.button
-        [ Button.IsFullWidth
-          Button.Color IsPrimary
-          Button.OnClick onClick ]
-        [ str txt ]
 
-let navItem nextUrl title dispatch =
-      Button.button [
-                Button.Option.OnClick (fun _ ->
-                    dispatch (NavigateTo (Url nextUrl)))
-                Button.IsHovered true
-                Button.Color IsInfo ]
-              [ str title ]
 
 
 let view (model : Model) (dispatch : Msg -> unit) =
+    let navDispatch = Url >> NavigateTo >> dispatch
     div []
         [
           yield (
@@ -224,13 +237,16 @@ let view (model : Model) (dispatch : Msg -> unit) =
                         Modifier.TextColor Color.IsBlack ]
                     Navbar.Menu.Option.CustomClass (if model.IsActive then "is-active" else "")
                 ] [
-                Navbar.Item.a [] [ navItem "#home" "Home" dispatch ]
-                Navbar.Item.a [] [ navItem "#description" "Description" dispatch ]
-                Navbar.Item.a [] [ navItem "#account" "Account" dispatch ]
+                Navbar.Item.a [] [ navItem "#home" "Home" navDispatch ]
+                Navbar.Item.a [] [ navItem "#description" "Description" navDispatch ]
+                Navbar.Item.a [] [ navItem "#account" "Account" navDispatch ]
+                (if Account.isAuthorized model.Account then
+                    Navbar.Item.a [] [navItem "#groups" "Groups" navDispatch]
+                 else div [] [] )
                 ]
                 Navbar.End.div [ ]
                   [ Navbar.Item.div [ ]
-                      [ Account.loginButton navItem dispatch model.Account ]
+                      [ Account.loginButton navItem navDispatch model.Account ]
                   ]
               ]
           match model.Stage with
@@ -241,6 +257,18 @@ let view (model : Model) (dispatch : Msg -> unit) =
               yield Description.view ()
           | Account ->
               yield Account.view model.Account (AccountMsg >> dispatch)
+          | Groups ->
+              yield Groups.groupsView
+                  (Account.getUserId model.Account)
+                  model.Groups
+                  (GroupsMsg >> dispatch)
+                  (Url >> NavigateTo >> dispatch)
+          | Group id ->
+              yield Client.Group.groupsView
+                  id
+                  model.Group
+                  (GroupMsg >> dispatch)
+
 
           yield Footer.footer [ ]
                 [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]

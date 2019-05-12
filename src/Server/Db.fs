@@ -36,8 +36,6 @@ type DbFamilio() =
     member x.Roles with get() = x.GetTable<Role>()
     member x.Groups with get() = x.GetTable<Group>()
     member x.UsersRolesGroups with get() = x.GetTable<UsersRolesGroups>()
-                                               .LoadWith(fun x -> x.Group :> obj)
-                                               .LoadWith(fun x -> x.Role :> obj)
     member x.Tasks with get() = x.GetTable<Task>()
                                     .LoadWith(fun x -> x.Group :> obj)
     member x.Comments with get() = x.GetTable<Comment>()

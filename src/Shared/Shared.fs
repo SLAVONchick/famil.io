@@ -12,11 +12,15 @@ type User =
       Nickname: string option
       Email: string option }
 
+type Roles =
+    | User = 1
+    | Admin = 2
+
 module Dto =
   type Role =
       { Id:int
         Name:string }
-  type Group =
+  type GroupDto =
       { Id: int64
         Name: string
         CreatedBy: string
@@ -28,11 +32,11 @@ module Dto =
         RoleId: int
         Role: Role
         GroupId: int64
-        Group: Group }
+        Group: GroupDto }
   type Task =
       { Id:Guid
         GroupId: int64
-        Group: Group
+        Group: GroupDto
         Name: string
         Description: string option
         CreatedBy: string

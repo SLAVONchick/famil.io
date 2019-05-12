@@ -58,15 +58,9 @@ type UsersRolesGroups =
         [<Column(Name="role_id")>]
         RoleId: int
 
-        [<Association(Storage="roles",ThisKey="role_id",OtherKey="id")>]
-        Role: Role
-
         [<NotNull>]
         [<Column(Name="group_id")>]
         GroupId: int64
-
-        [<Association(Storage="groups",ThisKey="group_id",OtherKey="id")>]
-        Group: Group
     }
 
 [<Table(Name="familio.tasks")>]

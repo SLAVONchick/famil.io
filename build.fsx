@@ -81,44 +81,41 @@ Target.create "Build" (fun _ ->
     runTool yarnTool "webpack-cli -p" __SOURCE_DIRECTORY__
 )
 
+
+let server = async {
+        runDotNet "watch run" serverPath
+    }
+
+let client = async {
+    runTool yarnTool "webpack-dev-server" __SOURCE_DIRECTORY__
+}
+
+let browser = async {
+    do! Async.Sleep 5000
+    openBrowser "http://localhost:8080"
+}
+
 Target.create "RunClient" (fun _ ->
-    let client = async {
-        runTool yarnTool "webpack-dev-server" __SOURCE_DIRECTORY__
-    }
-    let browser = async {
-        do! Async.Sleep 5000
-        openBrowser "http://localhost:8080"
-    }
-
-    let tasks = [client; browser]
-
-    tasks
+    [client; browser]
     |> Async.Parallel
     |> Async.RunSynchronously
     |> ignore
 )
 
 Target.create "RunServer" (fun _ ->
-    let server = async {
-        runDotNet "watch run" serverPath
-    }
-
-    let browser = async {
-        do! Async.Sleep 5000
-        openBrowser "http://localhost:8080"
-    }
-    let tasks = [server; browser]
-
-    tasks
+    [server; browser]
     |> Async.Parallel
     |> Async.RunSynchronously
     |> ignore
 
 )
 
-
-
-
+Target.create "RunBoth" (fun _ ->
+    [client; server; browser]
+    |> Async.Parallel
+    |> Async.RunSynchronously
+    |> ignore
+)
 
 open Fake.Core.TargetOperators
 
@@ -133,5 +130,9 @@ open Fake.Core.TargetOperators
 
 "Clean"
     ==> "RunServer"
+
+"Clean"
+    ==> "InstallClient"
+    ==> "RunBoth"
 
 Target.runOrDefaultWithArguments "Build"
