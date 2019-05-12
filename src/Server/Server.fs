@@ -44,7 +44,7 @@ module Startup =
     let configuration =
         ConfigurationBuilder().AddJsonFile(
             //"/home/viacheslav/repositories/famil.io/src/Server/appsettings.json"
-            @"C:\Users\1\RiderProjects\famil.io\src\Server\appsettings.json").Build()
+            @"./appsettings.json").Build()
 
 
     let auth0Client =
