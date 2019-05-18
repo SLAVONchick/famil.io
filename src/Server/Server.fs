@@ -11,6 +11,7 @@ open Server.Db
 open Shared.Dto
 open LinqToDB
 open Thoth.Json.Net
+open System.Text.Encodings.Web
 
 module Seq =
   let tryHead s =
@@ -37,18 +38,49 @@ module Startup =
     open Saturn
     open Shared
 
+    type TokenResponse =
+        { access_token: string
+          expires_in: int64
+          scope: string
+          token_type: string}
+
     let tryGetEnv = System.Environment.GetEnvironmentVariable >> function null | "" -> None | x -> Some x
 
-    let publicPath = Path.GetFullPath "../Client/public"
+    let publicPath = Path.GetFullPath "../Client/"
 
     let configuration =
         ConfigurationBuilder().AddJsonFile(
             //"/home/viacheslav/repositories/famil.io/src/Server/appsettings.json"
             @"./appsettings.json").Build()
 
+    let getApiToken () =
+        use client = new HttpClient()
+        let s =
+            sprintf
+                "grant_type=client_credentials&client_id=%s&client_secret=%s&audience=%s"
+                configuration.["Auth0:ClientId"]
+                configuration.["Auth0:ClientSecret"]
+                configuration.["Auth0:Identifier"]
+        printfn "%s" s
+        use content = new StringContent(s)
+        content.Headers.Remove("content-type") |> ignore
+        content.Headers.Add("content-type", "application/x-www-form-urlencoded")
+        let resp =
+            client.PostAsync(Uri(configuration.["Auth0:TokenUri"]), content)
+            |> Async.AwaitTask
+            |> Async.RunSynchronously
+        resp.Content.ReadAsStringAsync()
+        |> Async.AwaitTask
+        |> Async.RunSynchronously
+        |> Decode.Auto.fromString<TokenResponse>
 
-    let auth0Client =
-        new ManagementApiClient(configuration.["Auth0:Token"],
+
+    let getAuth0Client () =
+        let token =
+            match getApiToken() with
+            | Error e -> raise <| InvalidOperationException(e)
+            | Ok r -> r.access_token
+        new ManagementApiClient(token,
                                  Uri(configuration.["Auth0:Identifier"]))
 
     let port = "SERVER_PORT" |> tryGetEnv |> Option.map uint16 |> Option.defaultValue 8085us
@@ -102,6 +134,7 @@ module Startup =
 
         get "/api/currentuser" (fun next ctx ->
             task {
+                use auth0Client = getAuth0Client ()
                 ctx.SetHttpHeader "Access-Control-Allow-Origin" "*"
                 let user = ctx.User.Claims |> Seq.tryHead
                 let id = user |> function | Some x -> x.Value | None -> ""

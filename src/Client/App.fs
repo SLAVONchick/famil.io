@@ -83,6 +83,8 @@ let route =
 open System
 open Fable.Helpers.React
 open Fable.Helpers.React.Props
+open Fable.PowerPack
+open Thoth.Json
 
 
 let urlUpdate (result: Page option) model =
@@ -121,13 +123,8 @@ let getNextActive act =
     | Deactivate -> false
 
 let logInOrOut inOrOut model =
-    let url =
-        ("http://localhost:8085/api/" +
-         (if inOrOut then "login"
-         else "logout") +
-         "/http://localhost:8080" + model.Stage.ToString())
-    Browser.window.location.assign url
-    model, Cmd.none
+    let url = "/api/" + (if inOrOut then "login/" else "logout/") + Browser.window.location.href
+    model, Navigation.modifyUrl url
 
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     match msg with
