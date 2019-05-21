@@ -9,16 +9,13 @@ open Elmish.Browser.Navigation
 open Client.Common
 open System.Text.RegularExpressions
 
-let regex = Regex(@"(?<name>\#group/)(?<value>\d{19})")
+let regex = Regex(@"(?<name>\#group/)(?<value>\d{1,19})")
 
 let isGroup = regex.IsMatch
 
-let tryGetGroupId input =
-    let matches = regex.Matches(input)
-    match System.Int64.TryParse matches.[1].Value with
-    | true, v -> Some v
-    | _ -> None
-
+let getGroupId input =
+    let matches = regex.Match(input)
+    System.Int64.Parse matches.Groups.[2].Value
 type Page =
     | DefaultPage
     | Home
@@ -123,8 +120,20 @@ let getNextActive act =
     | Deactivate -> false
 
 let logInOrOut inOrOut model =
-    let url = "/api/" + (if inOrOut then "login/" else "logout/") + Browser.window.location.href
-    model, Navigation.modifyUrl url
+    let mutable url = ""
+#if DEBUG
+    url <- "http://localhost:8085"
+        +  "/api/"
+        + (if inOrOut then "login/" else "logout/")
+        + Browser.window.location.href
+#else
+    url <- (Browser.window.location.protocol + "//" + Browser.window.location.host)
+        +  "/api/"
+        + (if inOrOut then "login/" else "logout/")
+        + Browser.window.location.href
+#endif
+    Browser.window.location.assign url
+    model, Cmd.none
 
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     match msg with
@@ -147,13 +156,11 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             let nextModel = {currentModel with Stage = Groups}
             nextModel, Navigation.modifyUrl "#groups"
         | Url v  when v |> isGroup ->
-            let v =
-                match tryGetGroupId v with
-                | Some id -> id
-                | None -> raise <| InvalidOperationException("Wrong group id!")
-            let nextModel = {currentModel with Stage = Group v}
+            let id = getGroupId v
+            let nextModel = {currentModel with Stage = Group id}
             nextModel, Navigation.modifyUrl (nextModel.Stage.ToString())
-        | _ ->
+        | Url v ->
+            printfn "%s %b" v (isGroup v)
             let nextModel = {currentModel with Stage = Home}
             nextModel, Navigation.modifyUrl "#home"
     | AccountMsg a ->
@@ -208,8 +215,8 @@ let view (model : Model) (dispatch : Msg -> unit) =
           yield Navbar.navbar [ ]
               [ Navbar.Brand.div [ ]
                   [ Navbar.Item.a [ ]
-                      [ img [ Style [ Width "2.5em" ]
-                              Src @"/public/favicon.png" ] ]
+                      [ img [ Style [ Width "2em" ]
+                              Src @"./favicon.png" ] ]
                     Navbar.burger [
                         GenericOption.Props [
                             AriaExpanded model.IsActive

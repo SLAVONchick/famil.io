@@ -76,9 +76,6 @@ type Task =
         [<Column(Name="group_id")>]
         GroupId: int64
 
-        [<Association(Storage="groups",ThisKey="group_id",OtherKey="id")>]
-        Group: Group
-
         [<NotNull>]
         [<Column(Name="name")>]
         Name: string

@@ -101,7 +101,14 @@ let groupToElement (g:GroupDto) (ts:Task list) dispatch =
                 ]
             ]
         ]
-        Tile.parent [] (ts |> List.map taskToElement)
+        Tile.parent [
+            Tile.Option.CustomClass "is-fullwidth"
+        ] ((ts |> List.map taskToElement)@ [
+            Button.button [
+            Button.IsFullWidth
+          ] [
+            str "Add"
+            ] ])
     ]
 
 let groupsView groupId state (dispatch: Msg -> unit) =
@@ -116,4 +123,8 @@ let groupsView groupId state (dispatch: Msg -> unit) =
       | Error _ ->
           div [] []
       | Ok (g, ts) ->
-          div [] [ groupToElement g ts dispatch ]
+          if g.Id = groupId
+          then div [] [ groupToElement g ts dispatch ]
+          else
+            dispatch (StartLoading groupId)
+            div [] []

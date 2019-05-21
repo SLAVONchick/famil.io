@@ -194,6 +194,24 @@ module Startup =
                 return! json insertedGroupId next ctx
             })
 
+        getf "/api/group/%d" (fun id next ctx ->
+            task{
+                use db = new DbFamilio()
+                let group =
+                    query{
+                        for g in db.Groups do
+                        where (g.Id = id)
+                        select g
+                    } |> Seq.tryExactlyOne
+                let tasks =
+                    query{
+                        for t in db.Tasks do
+                        where (t.GroupId = id)
+                        select t
+                    } |> Seq.toArray
+                return! json (group, tasks) next ctx
+            })
+
     }
 
     let configureSerialization (services:IServiceCollection) =
