@@ -243,7 +243,9 @@ let view (model : Model) (dispatch : Msg -> unit) =
                 ] [
                 Navbar.Item.a [] [ navItem "#home" "Home" navDispatch ]
                 Navbar.Item.a [] [ navItem "#description" "Description" navDispatch ]
-                Navbar.Item.a [] [ navItem "#account" "Account" navDispatch ]
+                (if Account.isAuthorized model.Account then
+                    Navbar.Item.a [] [ navItem "#account" "Account" navDispatch ]
+                 else div [] [] )
                 (if Account.isAuthorized model.Account then
                     Navbar.Item.a [] [navItem "#groups" "Groups" navDispatch]
                  else div [] [] )
