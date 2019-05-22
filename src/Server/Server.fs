@@ -157,13 +157,7 @@ module Startup =
                 let res =
                     groups.ToArray()
                     |> Array.filter (fun g -> Option.isNone g.Key.DeletedAt && Option.isNone g.Key.DeletedBy)
-                    |> Array.map (fun g ->
-                        { Id = g.Key.Id
-                          Name = g.Key.Name
-                          CreatedAt = g.Key.CreatedAt
-                          CreatedBy = g.Key.CreatedBy
-                          DeletedBy = g.Key.DeletedBy
-                          DeletedAt = g.Key.DeletedAt })
+                    |> Array.map (fun g -> g.Key)
                 return! json res next ctx
             })
 
@@ -189,7 +183,7 @@ module Startup =
                     { UserId = newGroup.CreatedBy
                       GroupId = insertedGroupId
                       RoleId = (Roles.Admin |> int) }
-                let inserted = db.Insert(urg)
+                let! inserted = db.InsertAsync(urg)
                 do! tran.CommitAsync()
                 return! json insertedGroupId next ctx
             })
@@ -209,7 +203,47 @@ module Startup =
                         where (t.GroupId = id)
                         select t
                     } |> Seq.toArray
-                return! json (group, tasks) next ctx
+                let users =
+                    query{
+                        for ugr in db.UsersRolesGroups do
+                        where (ugr.GroupId = id)
+                        groupBy ugr.UserId
+                    } |> Seq.toArray
+                use auth0Mgr = getAuth0Client()
+                let users =
+                    users
+                    |> Array.map ((fun u ->
+                        auth0Mgr.Users.GetAsync(u.Key, "user_id,nickname,email", true)
+                        |> Async.AwaitTask
+                        |> Async.RunSynchronously)
+                        >> (fun resp ->
+                        { Id = resp.UserId |> Option.fromObj
+                          Nickname = resp.NickName |> Option.fromObj
+                          Email = resp.Email |> Option.fromObj }) )
+                return! json (group, tasks, users) next ctx
+            })
+        post "/api/task" (fun next ctx ->
+            task{
+                use db = new DbFamilio()
+                let! body = ctx.ReadBodyFromRequestAsync()
+                let res = Decode.Auto.fromString<TaskDto> body
+                let task =
+                    match res with
+                    | Ok t -> t
+                    | Error m -> raise <| InvalidOperationException m
+                let newTask =
+                    { Id = task.Id
+                      GroupId = task.GroupId
+                      Name = task.Name
+                      Description = task.Description
+                      CreatedBy = task.CreatedBy
+                      CreatedAt = task.CreatedAt
+                      Executor = task.Executor
+                      ExpiresBy = task.ExpiresBy
+                      Status = task.Status
+                      Priority = task.Priority }
+                let! inserted = db.InsertAsync(newTask)
+                return! json inserted next ctx
             })
 
     }

@@ -22,7 +22,7 @@ type Msg =
     | LoadedData  of Groups:Result<GroupDto list, exn>
     | Reset
     | StartUploadingGroup of Group:GroupDto
-    | GroupsUploaded of Result<Response, exn>
+    | GroupUploaded of Result<Response, exn>
     | OpenGroupCreationForm of GroupName:string option
     | CloseGroupCreationForm
 
@@ -44,8 +44,8 @@ let postGroup (group:GroupDto) =
         Cmd.ofPromise
             (res)
             [ Method HttpMethod.POST ]
-            (Ok >> GroupsUploaded)
-            (Error >> GroupsUploaded)
+            (Ok >> GroupUploaded)
+            (Error >> GroupUploaded)
     cmd
 
 
@@ -62,12 +62,12 @@ let update state msg =
         let nextState = UploadingGroup
         let nextCmd = postGroup g
         nextState, nextCmd
-    | GroupsUploaded res ->
+    | GroupUploaded res ->
         let message =
             match res with
             | Ok _ -> "Uploaded successfully!"
             | Error e -> e.Message
-        let nextState = GroupUploaded message
+        let nextState = State.GroupUploaded message
         nextState, Cmd.none
     | OpenGroupCreationForm name ->
         GroupCreationFormOpened name, Cmd.none
@@ -107,7 +107,7 @@ let groupsView userId state (dispatch: Msg -> unit) navigateTo =
               @ [ button "Add" (fun _ -> dispatch (OpenGroupCreationForm None)) ] )
   | UploadingGroup ->
       div [] []
-  | GroupUploaded msg ->
+  | State.GroupUploaded msg ->
       dispatch Reset
       div [] []
   | GroupCreationFormOpened name ->

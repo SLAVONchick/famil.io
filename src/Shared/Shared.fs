@@ -17,7 +17,7 @@ type Roles =
     | Admin = 2
 
 module Dto =
-  type Role =
+  type RoleDto =
       { Id:int
         Name:string }
   type GroupDto =
@@ -27,16 +27,14 @@ module Dto =
         CreatedAt: DateTime
         DeletedBy: string option
         DeletedAt: DateTime option }
-  type UsersRolesGroups =
+  type UsersRolesGroupsDto =
       { UserId: string
         RoleId: int
-        Role: Role
         GroupId: int64
         Group: GroupDto }
-  type Task =
+  type TaskDto =
       { Id:Guid
         GroupId: int64
-        Group: GroupDto
         Name: string
         Description: string option
         CreatedBy: string
@@ -45,10 +43,14 @@ module Dto =
         ExpiresBy: DateTime option
         Status: Status
         Priority: Priority }
-  type Comment =
+  type CommentDto =
       { Id: Guid
         TaskId: Guid
         UserId: string
         Contents: string
         CreatedAt: DateTime
         UpdatedAt: DateTime option }
+
+module Option =
+    let fromObj =
+        function null | "" -> None | x -> Some x

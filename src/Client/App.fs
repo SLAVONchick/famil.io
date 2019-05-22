@@ -271,6 +271,8 @@ let view (model : Model) (dispatch : Msg -> unit) =
                   (Url >> NavigateTo >> dispatch)
           | Group id ->
               yield Client.Group.groupsView
+                  (Group.getUserList model.Group)
+                  (Account.getUserId model.Account)
                   id
                   model.Group
                   (GroupMsg >> dispatch)
