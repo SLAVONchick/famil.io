@@ -9,18 +9,19 @@ open Fulma
 open Shared.Dto
 open Shared
 open Client.Common
+open System
 
 type State =
     | Initial
     | Loading
-    | Loaded of Groups:Result<GroupDto*TaskDto list*User list, exn>
+    | Loaded of Groups:Result<GroupDto*(TaskDto*string) list*User list, exn>
     | UploadingTask
     | TaskUploaded of Message:string
     | TaskCreationFormOpened of Task:TaskDto option*Users:User list
 
 type Msg =
     | StartLoading of GroupId:int64
-    | LoadedData  of Groups:Result<GroupDto*TaskDto list*User list, exn>
+    | LoadedData  of Groups:Result<GroupDto*(TaskDto*string) list*User list, exn>
     | Reset
     | StartUploadingTask of Task:TaskDto
     | TaskUploaded of Result<Response, exn>
@@ -29,7 +30,7 @@ type Msg =
 
 
 let getGroupsByUser groupId : Cmd<Msg> =
-    let res = fetchAs<GroupDto*TaskDto list*User list> (sprintf "/api/group/%d"  groupId) (Decode.Auto.generateDecoder())
+    let res = fetchAs<GroupDto*(TaskDto*string) list*User list> (sprintf "/api/group/%d"  groupId) (Decode.Auto.generateDecoder())
     let cmd =
       Cmd.ofPromise
         (res)
@@ -90,32 +91,18 @@ let update state msg =
 // defines the initial state and initial command (= side-effect) of the application
 let init () : State * Cmd<Msg> = State.Initial, Cmd.none
 
-let taskToElement (task:TaskDto) =
-    Media.media [] [
-        Media.content [] [
-            Content.content [] [
-                Hero.hero [ Hero.CustomClass "is-dark" ] [
-                    Hero.body [] [
-                        Content.content [] [
-                            table [] [
-                                th [] []
-                                th [] []
-                                tr [] [
-                                    td [] [
-                                        title [] [ str task.Name ]
-                                    ]
-                                    td [] [
-                                        small [] [ str (task.CreatedAt.ToString "dd.MM.yyyy hh:mm") ]
-                                    ]
-                                ]
-                                tr [ Span 2. ] [
-                                    p [] [ str (task.Description |> Option.defaultValue "No description") ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ]
-            ]
+let taskToElement (task:TaskDto, userName:string) =
+    Media.media [ ] [
+        Media.content [  ] [
+            strong [ ] [ str (task.Name + "    ") ]
+            small [ ] [ str userName ]
+            br [ ]
+            str (task.Description |> Option.defaultValue "No description")
+            br [ ]
+            match task.ExpiresBy with
+            | Some dt -> sprintf "Expires by %s" (dt.ToString("MM/dd/yyyy hh:mm"))
+            | None -> ""
+            |> str
         ]
     ]
 
@@ -126,16 +113,16 @@ let smallButton string dispatch =
         str string
     ]
 
-let groupToElement (g:GroupDto) (ts:TaskDto list) users dispatch =
+let groupToElement (g:GroupDto) (ts:(TaskDto*string) list) users dispatch =
     let addFriendLink = ""
     Tile.ancestor [] [
         Tile.parent [
             Tile.Option.IsVertical
-            Tile.Option.Size Tile.ISize.Is4
+            Tile.Option.Size Tile.ISize.Is5
         ] [
             Tile.child [ Tile.CustomClass "box" ] [
                 div [] [ strong [] [ str (g.Name) ] ]
-                div [] [ small [] [ str (g.CreatedAt.ToString "dd.MM.yyyy hh:mm") ] ]
+                div [] [ small [] [ str (g.CreatedAt.ToString "MM/dd/yyyy hh:mm") ] ]
             ]
             Tile.child [ Tile.CustomClass "box" ] [
                 div [] [
@@ -146,13 +133,18 @@ let groupToElement (g:GroupDto) (ts:TaskDto list) users dispatch =
         ]
         Tile.parent [
             Tile.Option.CustomClass "is-fullwidth"
-        ] ((ts |> List.map taskToElement)@ [
-            Button.button [
-            Button.IsFullWidth
-            Button.OnClick (fun _ -> dispatch (OpenTaskCreationForm (None, users)))
+        ] [
+            Tile.child [] ((ts |> List.map taskToElement))
+            Tile.child [] [
+                Button.button [
+                Button.IsExpanded
+                Button.IsFullWidth
+                Button.OnClick (fun _ -> dispatch (OpenTaskCreationForm (None, users)))
           ] [
-            str "Add"
-            ] ])
+            str "Add task"
+            ]
+            ]
+        ]
     ]
 
 let userToSelectOption dispatch (user:User) =
@@ -160,7 +152,100 @@ let userToSelectOption dispatch (user:User) =
         OnSelect (fun _ -> dispatch (user.Id |> Option.defaultValue ""))
         Value (user.Id |> Option.defaultValue "") ] [ str (user.Nickname |> Option.defaultValue "") ]
 
-let groupsView (users:User list) (userId:string option) groupId state (dispatch: Msg -> unit) =
+let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
+    let task =
+        Option.defaultValue
+            { Id = System.Guid.NewGuid()
+              GroupId = groupId
+              Name = ""
+              Description = None
+              CreatedBy = userId |> Option.defaultValue ""
+              CreatedAt = System.DateTime.Now
+              Executor = us |> List.head |> (fun u -> u.Id) |> Option.defaultValue ""
+              ExpiresBy = None
+              Status = 1
+              Priority = 1 }
+            t
+    let header = "Create task"
+    let content =
+        [
+            Media.media [] [
+                Media.content [] [
+                    Columns.columns [] [
+                        Column.column [ Column.Width (Screen.All, Column.IsFull) ] [
+                            strong [ ] [ str "Name:" ]
+                            Input.input [
+                                Input.Value task.Name
+                                Input.Option.Modifiers [ Modifier.Display (Screen.All, Display.Option.Block) ]
+                                Input.Option.IsReadOnly isLoading
+                                Input.OnChange (fun e ->
+                                    dispatch (OpenTaskCreationForm (Some {task with Name = e.Value}, us ) ) )
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+            Media.media [] [
+                Media.content [] [
+                    Columns.columns [] [
+                        Column.column [ Column.Width (Screen.All, Column.IsFull) ] [
+                            strong [ ] [ str "Description:" ]
+                            Input.input [
+                                Input.Value (task.Description |> Option.defaultValue "")
+                                Input.Option.Modifiers [ Modifier.Display (Screen.All, Display.Option.Block) ]
+                                Input.IsReadOnly isLoading
+                                Input.OnChange (fun e ->
+                                    dispatch (OpenTaskCreationForm (Some {task with Description = Option.fromString e.Value}, us ) ) )
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+            Media.media [] [
+                Media.content [] [
+                    Columns.columns [] [
+                        Column.column [  ] [
+                            strong [ ] [ str "Executor:" ]
+                        ]
+                        Column.column [  ] [
+                            Select.select [ Select.Disabled isLoading ]
+                                (us
+                                |> List.map (userToSelectOption (fun id ->
+                                    dispatch (OpenTaskCreationForm (Some {task with Executor = id}, us) )
+                                    ) ) )
+                        ]
+                    ]
+                ]
+            ]
+            Media.media [] [
+                Media.content [] [
+                    Columns.columns [] [
+                        Column.column [ Column.Width (Screen.All, Column.IsFull) ] [
+                            strong [ ] [ str "Expires by:" ]
+                            Flatpickr.flatpickr [
+                                Flatpickr.Disabled isLoading
+                                Flatpickr.ClassName "input"
+                                Flatpickr.EnableTimePicker true
+                                Flatpickr.DisableBy (fun dt -> dt < DateTime.Now)
+                                Flatpickr.TimeTwentyFour true
+                                Flatpickr.OnChange (fun dt ->
+                                    dispatch (OpenTaskCreationForm (Some {task with ExpiresBy = Some dt}, us) ) )
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+         ]
+    let footer =
+          [
+              (if isLoading
+              then Button.button [ Button.IsLoading isLoading ] []
+              else button "Create" (fun _ -> dispatch (StartUploadingTask {task with CreatedAt = System.DateTime.Now} ) ) )
+          ]
+    let close() = dispatch CloseTaskCreationForm
+    modal header content footer close
+
+let groupView (users:User list) (userId:string option) groupId state (dispatch: Msg -> unit) =
   match state with
   | Initial ->
        dispatch (StartLoading groupId)
@@ -178,86 +263,10 @@ let groupsView (users:User list) (userId:string option) groupId state (dispatch:
             dispatch (StartLoading groupId)
             div [] []
   | TaskCreationFormOpened (t, us) ->
-      let task =
-        Option.defaultValue
-            { Id = System.Guid()
-              GroupId = groupId
-              Name = ""
-              Description = None
-              CreatedBy = userId |> Option.defaultValue ""
-              CreatedAt = System.DateTime.Now
-              Executor = ""
-              ExpiresBy = None
-              Status = Status.Created
-              Priority = Priority.Highest }
-            t
-      let header = "Create task"
-      let content =
-        [
-            Media.media [] [
-                Media.content [] [
-                    Columns.columns [] [
-                        Column.column [ Column.Width (Screen.All, Column.IsFull) ] [
-                            strong [ ] [ str "Name:" ]
-                            Input.input [
-                                Input.Value task.Name
-                                Input.Option.Modifiers [ Modifier.Display (Screen.All, Display.Option.Block) ]
-                                Input.OnChange (fun e ->
-                                    dispatch (OpenTaskCreationForm (Some {task with Name = e.Value}, us ) ) )
-                            ]
-                        ]
-                    ]
-                ]
-            ]
-            Media.media [] [
-                Media.content [] [
-                    Columns.columns [] [
-                        Column.column [ Column.Width (Screen.All, Column.IsFull) ] [
-                            strong [ ] [ str "Description:" ]
-                            Input.input [
-                                Input.Value (task.Description |> Option.defaultValue "")
-                                Input.Option.Modifiers [ Modifier.Display (Screen.All, Display.Option.Block) ]
-                                Input.OnChange (fun e ->
-                                    dispatch (OpenTaskCreationForm (Some {task with Description = Option.fromObj e.Value}, us ) ) )
-                            ]
-                        ]
-                    ]
-                ]
-            ]
-            Media.media [] [
-                Media.content [] [
-                    Columns.columns [] [
-                        Column.column [  ] [
-                            strong [ ] [ str "Executor:" ]
-                        ]
-                        Column.column [  ] [
-                            Select.select [ ]
-                                (us
-                                |> List.map (userToSelectOption (fun id ->
-                                    dispatch (OpenTaskCreationForm (Some {task with Executor = id}, us) )
-                                    ) ) )
-                        ]
-                    ]
-                ]
-            ]
-            Media.media [] [
-                Media.content [] [
-                    Columns.columns [] [
-                        Column.column [ Column.Width (Screen.All, Column.IsFull) ] [
-                            strong [ ] [ str "Expires by:" ]
-                            Input.week []
-                        ]
-                    ]
-                ]
-            ]
-         ]
-      let footer =
-          [
-              button "Create" (fun _ -> dispatch (StartUploadingTask {task with CreatedAt = System.DateTime.Now}))
-          ]
-      let close() = dispatch CloseTaskCreationForm
-      modal header content footer close
-    | State.TaskUploaded _ ->
-        div [] []
-    | UploadingTask ->
-        div [] []
+      taskCreationModal t us false groupId userId dispatch
+
+  | UploadingTask ->
+      taskCreationModal None users false groupId userId dispatch
+  | State.TaskUploaded _ ->
+      dispatch Reset
+      div [] []

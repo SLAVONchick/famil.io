@@ -8,6 +8,9 @@ open Fable.Import
 open Elmish.Browser.Navigation
 open Client.Common
 open System.Text.RegularExpressions
+open Fable.Core
+
+JsInterop.importAll "flatpickr/dist/themes/material_green.css"
 
 let regex = Regex(@"(?<name>\#group/)(?<value>\d{1,19})")
 
@@ -270,7 +273,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
                   (GroupsMsg >> dispatch)
                   (Url >> NavigateTo >> dispatch)
           | Group id ->
-              yield Client.Group.groupsView
+              yield Client.Group.groupView
                   (Group.getUserList model.Group)
                   (Account.getUserId model.Account)
                   id

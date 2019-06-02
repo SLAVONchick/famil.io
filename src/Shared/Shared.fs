@@ -30,8 +30,7 @@ module Dto =
   type UsersRolesGroupsDto =
       { UserId: string
         RoleId: int
-        GroupId: int64
-        Group: GroupDto }
+        GroupId: int64 }
   type TaskDto =
       { Id:Guid
         GroupId: int64
@@ -41,8 +40,8 @@ module Dto =
         CreatedAt: DateTime
         Executor: string
         ExpiresBy: DateTime option
-        Status: Status
-        Priority: Priority }
+        Status: int
+        Priority: int }
   type CommentDto =
       { Id: Guid
         TaskId: Guid
@@ -52,5 +51,5 @@ module Dto =
         UpdatedAt: DateTime option }
 
 module Option =
-    let fromObj =
+    let fromString =
         function null | "" -> None | x -> Some x

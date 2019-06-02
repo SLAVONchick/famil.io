@@ -217,10 +217,17 @@ module Startup =
                         |> Async.AwaitTask
                         |> Async.RunSynchronously)
                         >> (fun resp ->
-                        { Id = resp.UserId |> Option.fromObj
-                          Nickname = resp.NickName |> Option.fromObj
-                          Email = resp.Email |> Option.fromObj }) )
-                return! json (group, tasks, users) next ctx
+                        { Id = resp.UserId |> Option.fromString
+                          Nickname = resp.NickName |> Option.fromString
+                          Email = resp.Email |> Option.fromString }) )
+                let tasksAndUsers =
+                    tasks
+                    |> Array.map (fun t ->
+                        t, auth0Mgr.Users.GetAsync(t.Executor, "nickname", true)
+                        |> Async.AwaitTask
+                        |> Async.RunSynchronously
+                        |> (fun u -> u.NickName) )
+                return! json (group, tasksAndUsers, users) next ctx
             })
         post "/api/task" (fun next ctx ->
             task{
@@ -232,7 +239,7 @@ module Startup =
                     | Ok t -> t
                     | Error m -> raise <| InvalidOperationException m
                 let newTask =
-                    { Id = task.Id
+                    { Id = System.Guid.NewGuid()
                       GroupId = task.GroupId
                       Name = task.Name
                       Description = task.Description
@@ -240,8 +247,8 @@ module Startup =
                       CreatedAt = task.CreatedAt
                       Executor = task.Executor
                       ExpiresBy = task.ExpiresBy
-                      Status = task.Status
-                      Priority = task.Priority }
+                      Status = enum task.Status
+                      Priority = enum task.Priority }
                 let! inserted = db.InsertAsync(newTask)
                 return! json inserted next ctx
             })

@@ -2,6 +2,11 @@ namespace Server.Tables
 open System
 open LinqToDB.Mapping
 open Shared
+open System.ComponentModel.DataAnnotations
+
+module Const =
+    let dataType =
+        DataType.DateTime
 
 
 [<Table(Name="familio.roles")>]
@@ -68,7 +73,6 @@ type UsersRolesGroups =
 type Task =
     {
         [<PrimaryKey>]
-        [<Identity>]
         [<Column(Name="id")>]
         Id:Guid
 
@@ -95,7 +99,7 @@ type Task =
         [<Column(Name="executor")>]
         Executor: string
 
-        [<Column(Name="expires_by")>]
+        [<Column(Name="expires_by", CanBeNull=true, DbType="timestamp")>]
         ExpiresBy: DateTime option
 
         [<NotNull>]
