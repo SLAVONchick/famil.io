@@ -15,7 +15,7 @@ type State =
     | Initial
     | Loading
     | Loaded of Groups:Result<GroupDto*(TaskDto*string) list*User list, exn>
-    | UploadingTask
+    | UploadingTask of Task:TaskDto*Users:User list
     | TaskUploaded of Message:string
     | TaskCreationFormOpened of Task:TaskDto option*Users:User list
 
@@ -23,7 +23,7 @@ type Msg =
     | StartLoading of GroupId:int64
     | LoadedData  of Groups:Result<GroupDto*(TaskDto*string) list*User list, exn>
     | Reset
-    | StartUploadingTask of Task:TaskDto
+    | StartUploadingTask of Task:TaskDto *Users:User list
     | TaskUploaded of Result<Response, exn>
     | OpenTaskCreationForm of Task:TaskDto option*Users:User list
     | CloseTaskCreationForm
@@ -72,8 +72,8 @@ let update state msg =
     | CloseTaskCreationForm
     | Reset ->
         Initial, Cmd.none
-    | StartUploadingTask t ->
-        let nextState = UploadingTask
+    | StartUploadingTask (t, us) ->
+        let nextState = UploadingTask (t, us)
         let nextCmd = postTask t
         nextState, nextCmd
     | TaskUploaded res ->
@@ -239,8 +239,11 @@ let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
     let footer =
           [
               (if isLoading
-              then Button.button [ Button.IsLoading isLoading ] []
-              else button "Create" (fun _ -> dispatch (StartUploadingTask {task with CreatedAt = System.DateTime.Now} ) ) )
+              then Button.button [
+                  Button.IsLoading isLoading
+                  Button.IsHovered true
+                  Button.Color IsInfo ] []
+              else button "Create" (fun _ -> dispatch (StartUploadingTask ({task with CreatedAt = System.DateTime.Now}, us) ) ) )
           ]
     let close() = dispatch CloseTaskCreationForm
     modal header content footer close
@@ -264,9 +267,8 @@ let groupView (users:User list) (userId:string option) groupId state (dispatch: 
             div [] []
   | TaskCreationFormOpened (t, us) ->
       taskCreationModal t us false groupId userId dispatch
-
-  | UploadingTask ->
-      taskCreationModal None users false groupId userId dispatch
+  | UploadingTask (t, us) ->
+      taskCreationModal (Some t) us true groupId userId dispatch
   | State.TaskUploaded _ ->
       dispatch Reset
       div [] []

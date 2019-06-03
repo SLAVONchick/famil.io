@@ -3,6 +3,7 @@ open System
 open LinqToDB.Mapping
 open Shared
 open System.ComponentModel.DataAnnotations
+open LinqToDB
 
 module Const =
     let dataType =
@@ -84,8 +85,8 @@ type Task =
         [<Column(Name="name")>]
         Name: string
 
-        [<Column(Name="description")>]
-        Description: string option
+        [<Column(Name="description", CanBeNull=true, DataType=DataType.Text)>]
+        Description: string
 
         [<NotNull>]
         [<Column(Name="created_by")>]
@@ -99,8 +100,8 @@ type Task =
         [<Column(Name="executor")>]
         Executor: string
 
-        [<Column(Name="expires_by", CanBeNull=true, DbType="timestamp")>]
-        ExpiresBy: DateTime option
+        [<Column(Name="expires_by", CanBeNull=true, DataType=DataType.DateTime)>]
+        ExpiresBy: Nullable<DateTime>
 
         [<NotNull>]
         [<Column(Name="status")>]
