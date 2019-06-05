@@ -95,7 +95,9 @@ let taskToElement (task:TaskDto, userName:string) =
     Media.media [ ] [
         Media.content [  ] [
             strong [ ] [ str (task.Name + "    ") ]
-            small [ ] [ str userName ]
+            small [ Style [ Display "block" ] ] [
+                b [] [ str "Assigned to: " ]
+                str userName ]
             br [ ]
             str (task.Description |> Option.defaultValue "No description")
             br [ ]
@@ -118,13 +120,18 @@ let groupToElement (g:GroupDto) (ts:(TaskDto*string) list) users dispatch =
     Tile.ancestor [] [
         Tile.parent [
             Tile.Option.IsVertical
-            Tile.Option.Size Tile.ISize.Is5
+            Tile.Option.Size Tile.ISize.Is4
         ] [
-            Tile.child [ Tile.CustomClass "box" ] [
-                div [] [ strong [] [ str (g.Name) ] ]
-                div [] [ small [] [ str (g.CreatedAt.ToString "MM/dd/yyyy hh:mm") ] ]
+            Tile.child [
+                Tile.CustomClass "box"
+                Tile.Option.Modifiers [ Modifier.BackgroundColor IsDark ] ] [
+                    div [ ] [ strong [ Style [ CSSProp.Color "white" ] ] [ str (g.Name) ] ]
+                    div [] [ small [ Style [ CSSProp.Color "white" ] ] [
+                        str (g.CreatedAt.ToString "MM/dd/yyyy hh:mm") ] ]
             ]
-            Tile.child [ Tile.CustomClass "box" ] [
+            Tile.child [
+                Tile.Option.Modifiers [ Modifier.BackgroundColor IsGreyLight ]
+                Tile.CustomClass "box" ] [
                 div [] [
                     a [ Href addFriendLink ] [ str addFriendLink ]
                     smallButton "Reset" dispatch
@@ -132,18 +139,20 @@ let groupToElement (g:GroupDto) (ts:(TaskDto*string) list) users dispatch =
             ]
         ]
         Tile.parent [
-            Tile.Option.CustomClass "is-fullwidth"
         ] [
-            Tile.child [] ((ts |> List.map taskToElement))
-            Tile.child [] [
+            Tile.child [
+                Tile.Option.CustomClass "notification"
+            ] ((ts |> List.map taskToElement)@ [
                 Button.button [
-                Button.IsExpanded
-                Button.IsFullWidth
-                Button.OnClick (fun _ -> dispatch (OpenTaskCreationForm (None, users)))
+                    Button.Props [ Style [ Display "block" ] ]
+                    Button.IsExpanded
+                    Button.IsFullWidth
+                    Button.Color IsInfo
+                    Button.OnClick (fun _ -> dispatch (OpenTaskCreationForm (None, users)))
           ] [
             str "Add task"
             ]
-            ]
+            ] )
         ]
     ]
 
@@ -241,6 +250,7 @@ let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
               (if isLoading
               then Button.button [
                   Button.IsLoading isLoading
+                  Button.IsFullWidth
                   Button.IsHovered true
                   Button.Color IsInfo ] []
               else button "Create" (fun _ -> dispatch (StartUploadingTask ({task with CreatedAt = System.DateTime.Now}, us) ) ) )
