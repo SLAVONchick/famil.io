@@ -18,14 +18,18 @@ type State =
     | UploadingTask of Task:TaskDto*Users:User list
     | TaskUploaded of Message:string
     | TaskCreationFormOpened of Task:TaskDto option*Users:User list
+    | SearchUsersFormOpened of Nickname:string
+    | SearchingUsers of Nickname:string
 
 type Msg =
     | StartLoading of GroupId:int64
     | LoadedData  of Groups:Result<GroupDto*(TaskDto*string) list*User list, exn>
     | Reset
     | StartUploadingTask of Task:TaskDto *Users:User list
-    | TaskUploaded of Result<Response, exn>
+    | TaskUploaded of Result:Result<Response, exn>
     | OpenTaskCreationForm of Task:TaskDto option*Users:User list
+    | OpenSearchUsersForm of Nickname:string
+    | StartUsersSearch of Nickname:string
     | CloseTaskCreationForm
 
 
@@ -85,6 +89,10 @@ let update state msg =
         nextState, Cmd.none
     | OpenTaskCreationForm (t, us) ->
         TaskCreationFormOpened (t, us), Cmd.none
+    | OpenSearchUsersForm nick ->
+        SearchUsersFormOpened nick, Cmd.none
+    | StartUsersSearch nick ->
+        SearchingUsers nick, Cmd.none
 
 
 
@@ -114,9 +122,50 @@ let smallButton string dispatch =
     ] [
         str string
     ]
+let rec nickNamesLink =
+    function
+    | [h]   -> [ Tag.tag [] [ str (h.Nickname |> Option.defaultValue "") ] ]
+    | h::t  -> [ Tag.tag [] [ str (Option.defaultValue "" h.Nickname + ", ") ] ] @ nickNamesLink t
+    | _     -> [ div [] [] ]
 
-let groupToElement (g:GroupDto) (ts:(TaskDto*string) list) users dispatch =
-    let addFriendLink = ""
+let searchUsersModal (searching: bool) nick (dispatch: Msg -> unit) =
+    let header = "Search users"
+    let content = [
+        Field.div
+            [Field.Option.HasAddons]
+            [
+                Control.div [] [
+                    Input.text [
+                        Input.Placeholder "Type user name..."
+                        Input.OnChange (fun e -> dispatch (OpenSearchUsersForm e.Value) )
+                        Input.Value nick
+                    ]
+                ]
+                Control.div [] [
+                    Button.button [
+                        Button.Props [ Style [ Display "block" ] ]
+                        Button.IsExpanded
+                        Button.IsFullWidth
+                        Button.Color IsInfo
+                        Button.IsLoading searching
+                        Button.OnClick (fun _ ->
+                            if searching |> not then
+                                dispatch (StartUsersSearch nick)
+                            else () ) ] [
+                            str "Seacrh"
+                    ]
+                ]
+            ]
+    ]
+    let footer : Fable.Import.React.ReactElement list = []
+    modal header content footer (fun _ -> dispatch Reset)
+
+let groupToElement
+    (g:GroupDto)
+    (ts:(TaskDto*string) list)
+    (users: User list)
+    dispatch =
+
     Tile.ancestor [] [
         Tile.parent [
             Tile.Option.IsVertical
@@ -131,13 +180,19 @@ let groupToElement (g:GroupDto) (ts:(TaskDto*string) list) users dispatch =
             ]
             Tile.child [
                 Tile.Option.Modifiers [ Modifier.BackgroundColor IsGreyLight ]
-                Tile.CustomClass "box" ] [
-                div [] [
-                    a [ Href addFriendLink ] [ str addFriendLink ]
-                    smallButton "Reset" dispatch
-                ]
+                Tile.CustomClass "box" ]
+                ([ strong [] [ str "Users:" ]
+                   br [] ] @
+                (nickNamesLink users) @
+                 [ Button.button [
+                    Button.Props [ Style [ Display "block" ] ]
+                    Button.IsExpanded
+                    Button.OnClick (fun _ -> dispatch (OpenSearchUsersForm ""))
+                 ] [
+                    str "Add users"
+                   ]
+                ]  )
             ]
-        ]
         Tile.parent [
         ] [
             Tile.child [
@@ -271,7 +326,8 @@ let groupView (users:User list) (userId:string option) groupId state (dispatch: 
           div [] []
       | Ok (g, ts, us) ->
           if g.Id = groupId
-          then div [] [ groupToElement g ts us dispatch ]
+          then
+            div [] [ groupToElement g ts us dispatch ]
           else
             dispatch (StartLoading groupId)
             div [] []
@@ -282,3 +338,7 @@ let groupView (users:User list) (userId:string option) groupId state (dispatch: 
   | State.TaskUploaded _ ->
       dispatch Reset
       div [] []
+  | SearchUsersFormOpened nick ->
+      searchUsersModal false nick dispatch
+  | SearchingUsers nick ->
+      searchUsersModal false nick dispatch
