@@ -31,7 +31,7 @@ type Msg =
 
 
 let getUser () : Cmd<Msg> =
-    let res() = fetchAs<User> "/api/currentuser" (Decode.Auto.generateDecoder())
+    let res() = fetchAs<User> "/api/users/current" (Decode.Auto.generateDecoder())
     let cmd =
       Cmd.ofPromise
         (res())

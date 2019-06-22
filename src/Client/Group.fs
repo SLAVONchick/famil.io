@@ -31,7 +31,7 @@ type Msg =
     | TaskUploaded of Result:Result<Response, exn>
     | OpenTaskCreationForm of Task:TaskDto option*Users:User list
     | OpenSearchUsersForm of Nickname:string*Users:(User*bool) list option
-    | StartUsersSearch of Nickname:string*Users:(User*bool) list option
+    | StartUsersSearch of Nickname:string*GroupId:int64*Users:(User*bool) list option
     | CloseTaskCreationForm
     | SearchUsersFinished of Result<string*(User*bool) list option, exn>
 
@@ -46,8 +46,8 @@ let getGroupsByUser groupId : Cmd<Msg> =
             (Error >> LoadedData)
     cmd
 
-let searchUsers nick : Cmd<Msg> =
-    let res = fetchAs<string*(User*bool) list option> (sprintf "/api/user?search=%s" nick) (Decode.Auto.generateDecoder())
+let searchUsers nick (groupId: int64) : Cmd<Msg> =
+    let res = fetchAs<string*(User*bool) list option> (sprintf "/api/users/search/%s/%d" nick groupId) (Decode.Auto.generateDecoder())
     Cmd.ofPromise
         (res)
         []
@@ -102,9 +102,9 @@ let update state msg =
         TaskCreationFormOpened (t, us), Cmd.none
     | OpenSearchUsersForm (nick, users) ->
         SearchUsersFormOpened (nick, users), Cmd.none
-    | StartUsersSearch (nick, users) ->
+    | StartUsersSearch (nick, groupId, users) ->
         let nextState = SearchingUsers (nick, users)
-        let nextCmd = searchUsers nick
+        let nextCmd = searchUsers nick groupId
         nextState, nextCmd
     | SearchUsersFinished res ->
         match res with
@@ -145,7 +145,7 @@ let rec nickNamesLink =
     | h::t  -> [ Tag.tag [] [ str (Option.defaultValue "" h.Nickname + ", ") ] ] @ nickNamesLink t
     | _     -> [ div [] [] ]
 
-let searchUsersModal (searching: bool) nick (users: (User*bool) list) (dispatch: Msg -> unit) =
+let searchUsersModal groupId (searching: bool) nick (users: (User*bool) list) (dispatch: Msg -> unit) =
     let header = "Search users"
     let content = [
         Field.div
@@ -168,7 +168,7 @@ let searchUsersModal (searching: bool) nick (users: (User*bool) list) (dispatch:
                         Button.IsLoading searching
                         Button.OnClick (fun _ ->
                             if searching |> not then
-                                dispatch (StartUsersSearch (nick, users |> (fun u ->
+                                dispatch (StartUsersSearch (nick, groupId, users |> (fun u ->
                                     match u with [] -> None | _ -> Some u ) ) )
                             else
                                 () ) ] [
@@ -176,29 +176,24 @@ let searchUsersModal (searching: bool) nick (users: (User*bool) list) (dispatch:
                     ]
                 ]
             ]
-        (match users with
-        | [] -> div [] []
-        | _ ->
-            Select.select [] [
-                select [] (
-                    users
-                    |> List.fold (fun el (u,b) -> el @ [
-                        option [
-                            OnSelect (fun _ ->
-                                dispatch (OpenSearchUsersForm (nick,
-                                                        users
-                                                        |> List.map (fun (u',b') ->
-                                                            if u = u' then (u, not b') else (u', b') )
-                                                        |> Some
-                                                        )
-                                        )
-                                    )
-                            Value ((Option.defaultValue "" u.Nickname) + " (" + (Option.defaultValue "" u.Email) + ")" )
-                        ] []
+        div [] (
+            match users with
+            | [] -> [ div [] [] ]
+            | _ ->
+                users
+                |> List.map (fun (u,b) ->
+                    Media.media [] [
+                        Media.content [] [
+                            strong [] [ str (Option.defaultValue "" u.Nickname) ]
+                            small [] [ str ( " (" + (Option.defaultValue "" u.Email) + ")" ) ]
+                        ]
+                        Media.right [] [
+                            button "Add user" (ignore)
+                        ]
                     ]
-                ) []
-            )
-            ])
+                )
+        )
+
     ]
     let footer : Fable.Import.React.ReactElement list = []
     modal header content footer (fun _ -> dispatch Reset)
@@ -386,8 +381,8 @@ let groupView (users:User list) (userId:string option) groupId state (dispatch: 
         dispatch Reset
         div [] []
     | SearchUsersFormOpened (nick, us) ->
-        searchUsersModal false nick (Option.defaultValue [] us) dispatch
+        searchUsersModal groupId false nick (Option.defaultValue [] us) dispatch
     | SearchingUsers (nick, us) ->
-        searchUsersModal true nick (Option.defaultValue [] us) dispatch
+        searchUsersModal groupId true nick (Option.defaultValue [] us) dispatch
     | State.SearchUsersFinished (nick, us) ->
-        searchUsersModal false nick (Option.defaultValue [] us) dispatch
+        searchUsersModal groupId false nick (Option.defaultValue [] us) dispatch

@@ -12,6 +12,7 @@ open Shared.Dto
 open LinqToDB
 open Thoth.Json.Net
 open System.Text.Encodings.Web
+open Auth0.ManagementApi.Models
 
 module Seq =
   let tryHead s =
@@ -38,11 +39,20 @@ module Startup =
     open Saturn
     open Shared
 
+    let inline (|IsBigEnough|_|) len (input:^a) =
+        let inputLen = (^a: (member Length : int) input)
+        if inputLen >= len then Some () else None
+
+    let prepare (nick: string) =
+        match nick with
+        | IsBigEnough 3 -> "*" + nick + "*"
+        | _ -> nick + "*"
+
     type TokenResponse =
         { access_token: string
           expires_in: int64
           scope: string
-          token_type: string}
+          token_type: string }
 
     let tryGetEnv = System.Environment.GetEnvironmentVariable >> function null | "" -> None | x -> Some x
 
@@ -101,157 +111,189 @@ module Startup =
             }
 
     open Server.Tables
-    let webApp = router {
-        get "/api/init" (fun next ctx ->
-            task {
-                let! counter = getInitCounter()
-                return! json counter next ctx
-            })
-        getf "/api/login/%s" (fun uri next ctx ->
-            task{
-                let props =
-                    AuthenticationProperties(
-                        RedirectUri=(if String.IsNullOrEmpty uri then
-                                        "http://localhost:8085/api/callback"
-                                     else uri))
-                do! login ctx props
-                return! json null next ctx
-            })
-        getf "/api/logout/%s" (fun uri next ctx ->
-            task{
-                let props =
-                    AuthenticationProperties(
-                        RedirectUri=(if String.IsNullOrEmpty uri then
-                                        "http://localhost:8085/api/callback"
-                                     else uri))
-                do! logout ctx props
-                return! json null next ctx
-            })
-        post "/api/callback" (fun next ctx ->
-            task {
-                return! json null next ctx
-            })
+    let webApp =
+        router {
+            get "/api/init" (fun next ctx ->
+                task {
+                    let! counter = getInitCounter()
+                    return! json counter next ctx
+                })
+            getf "/api/login/%s" (fun uri next ctx ->
+                task{
+                    let props =
+                        AuthenticationProperties(
+                            RedirectUri=(if String.IsNullOrEmpty uri then
+                                            "http://localhost:8085/api/callback"
+                                         else uri))
+                    do! login ctx props
+                    return! json null next ctx
+                })
+            getf "/api/logout/%s" (fun uri next ctx ->
+                task{
+                    let props =
+                        AuthenticationProperties(
+                            RedirectUri=(if String.IsNullOrEmpty uri then
+                                            "http://localhost:8085/api/callback"
+                                         else uri))
+                    do! logout ctx props
+                    return! json null next ctx
+                })
+            post "/api/callback" (fun next ctx ->
+                task {
+                    return! json null next ctx
+                })
 
-        get "/api/currentuser" (fun next ctx ->
-            task {
-                use auth0Client = getAuth0Client ()
-                ctx.SetHttpHeader "Access-Control-Allow-Origin" "*"
-                let user = ctx.User.Claims |> Seq.tryHead
-                let id = user |> function | Some x -> x.Value | None -> ""
-                let! resp =
-                    auth0Client.Users.GetAsync(id, "user_id,nickname,email", true)
-                let user = { Id = resp.UserId |> Some; Nickname = resp.NickName |> Some ; Email = resp.Email |> Some }
-                return! json user next ctx
-            })
+            get "/api/users/current" (fun next ctx ->
+                task {
+                    use auth0Client = getAuth0Client ()
+                    ctx.SetHttpHeader "Access-Control-Allow-Origin" "*"
+                    let user = ctx.User.Claims |> Seq.tryHead
+                    let id = user |> function | Some x -> x.Value | None -> ""
+                    let! resp =
+                        auth0Client.Users.GetAsync(id, "user_id,nickname,email", true)
+                    let user = { Id = resp.UserId |> Some; Nickname = resp.NickName |> Some ; Email = resp.Email |> Some }
+                    return! json user next ctx
+                })
 
-        getf "/api/groups/%s" (fun userId next ctx ->
-            task {
-                use db = new DbFamilio()
-                let groups =
-                    query {
-                        for urg in db.UsersRolesGroups do
-                            join g in db.Groups on (urg.GroupId = g.Id)
-                            where (urg.UserId = userId)
-                            groupBy g
-                    }
-                let res =
-                    groups.ToArray()
-                    |> Array.filter (fun g -> Option.isNone g.Key.DeletedAt && Option.isNone g.Key.DeletedBy)
-                    |> Array.map (fun g -> g.Key)
-                return! json res next ctx
-            })
+            getf "/api/groups/%s" (fun userId next ctx ->
+                task {
+                    use db = new DbFamilio()
+                    let groups =
+                        query {
+                            for urg in db.UsersRolesGroups do
+                                join g in db.Groups on (urg.GroupId = g.Id)
+                                where (urg.UserId = userId)
+                                groupBy g
+                        }
+                    let res =
+                        groups.ToArray()
+                        |> Array.filter (fun g -> Option.isNone g.Key.DeletedAt && Option.isNone g.Key.DeletedBy)
+                        |> Array.map (fun g -> g.Key)
+                    return! json res next ctx
+                })
 
-        post "/api/group" (fun next ctx ->
-            task {
-                let! body = ctx.ReadBodyFromRequestAsync()
-                let res = Decode.Auto.fromString<GroupDto> body
-                let group =
-                    match res with
-                    | Error _ -> raise <| InvalidOperationException("")
-                    | Ok g -> g
-                use db = new DbFamilio()
-                let newGroup =
-                    { Id = 0L
-                      Name = group.Name
-                      CreatedAt = group.CreatedAt
-                      CreatedBy = group.CreatedBy
-                      DeletedAt = group.DeletedAt
-                      DeletedBy = group.DeletedBy }
-                use! tran =  db.BeginTransactionAsync()
-                let! insertedGroupId = db.InsertWithInt64IdentityAsync(newGroup)
-                let urg =
-                    { UserId = newGroup.CreatedBy
-                      GroupId = insertedGroupId
-                      RoleId = (Roles.Admin |> int) }
-                let! inserted = db.InsertAsync(urg)
-                do! tran.CommitAsync()
-                return! json insertedGroupId next ctx
-            })
+            post "/api/group" (fun next ctx ->
+                task {
+                    let! body = ctx.ReadBodyFromRequestAsync()
+                    let res = Decode.Auto.fromString<GroupDto> body
+                    let group =
+                        match res with
+                        | Error _ -> raise <| InvalidOperationException("")
+                        | Ok g -> g
+                    use db = new DbFamilio()
+                    let newGroup =
+                        { Id = 0L
+                          Name = group.Name
+                          CreatedAt = group.CreatedAt
+                          CreatedBy = group.CreatedBy
+                          DeletedAt = group.DeletedAt
+                          DeletedBy = group.DeletedBy }
+                    use! tran =  db.BeginTransactionAsync()
+                    let! insertedGroupId = db.InsertWithInt64IdentityAsync(newGroup)
+                    let urg =
+                        { UserId = newGroup.CreatedBy
+                          GroupId = insertedGroupId
+                          RoleId = (Roles.Admin |> int) }
+                    let! inserted = db.InsertAsync(urg)
+                    do! tran.CommitAsync()
+                    return! json insertedGroupId next ctx
+                })
 
-        getf "/api/group/%d" (fun id next ctx ->
-            task{
-                use db = new DbFamilio()
-                let group =
-                    query{
-                        for g in db.Groups do
-                        where (g.Id = id)
-                        select g
-                    } |> Seq.tryExactlyOne
-                let tasks =
-                    query{
-                        for t in db.Tasks do
-                        where (t.GroupId = id)
-                        select t
-                    } |> Seq.toArray
-                let users =
-                    query{
-                        for ugr in db.UsersRolesGroups do
-                        where (ugr.GroupId = id)
-                        groupBy ugr.UserId
-                    } |> Seq.toArray
-                use auth0Mgr = getAuth0Client()
-                let users =
-                    users
-                    |> Array.map ((fun u ->
-                        auth0Mgr.Users.GetAsync(u.Key, "user_id,nickname,email", true)
-                        |> Async.AwaitTask
-                        |> Async.RunSynchronously)
-                        >> (fun resp ->
-                        { Id = resp.UserId |> Option.fromString
-                          Nickname = resp.NickName |> Option.fromString
-                          Email = resp.Email |> Option.fromString }) )
-                let tasksAndUsers =
-                    tasks
-                    |> Array.map (fun t ->
-                        t, auth0Mgr.Users.GetAsync(t.Executor, "nickname", true)
-                        |> Async.AwaitTask
-                        |> Async.RunSynchronously
-                        |> (fun u -> u.NickName) )
-                return! json (group, tasksAndUsers, users) next ctx
-            })
-        post "/api/task" (fun next ctx ->
-            task{
-                use db = new DbFamilio()
-                let! body = ctx.ReadBodyFromRequestAsync()
-                let res = Decode.Auto.fromString<TaskDto> body
-                let task =
-                    match res with
-                    | Ok t -> t
-                    | Error m -> raise <| InvalidOperationException m
-                let newTask =
-                    { Id = System.Guid.NewGuid()
-                      GroupId = task.GroupId
-                      Name = task.Name
-                      Description = task.Description |> Option.toObj
-                      CreatedBy = task.CreatedBy
-                      CreatedAt = task.CreatedAt
-                      Executor = task.Executor
-                      ExpiresBy = task.ExpiresBy |> (function | None -> Nullable<DateTime>() | Some dt -> Nullable<DateTime>(dt))
-                      Status = enum task.Status
-                      Priority = enum task.Priority }
-                let! inserted = db.InsertAsync(newTask)
-                return! json inserted next ctx
-            })
+            getf "/api/group/%d" (fun id next ctx ->
+                task{
+                    use db = new DbFamilio()
+                    let group =
+                        query{
+                            for g in db.Groups do
+                            where (g.Id = id)
+                            select g
+                        } |> Seq.tryExactlyOne
+                    let tasks =
+                        query{
+                            for t in db.Tasks do
+                            where (t.GroupId = id)
+                            select t
+                        } |> Seq.toArray
+                    let users =
+                        query{
+                            for ugr in db.UsersRolesGroups do
+                            where (ugr.GroupId = id)
+                            groupBy ugr.UserId
+                        } |> Seq.toArray
+                    use auth0Mgr = getAuth0Client()
+                    let users =
+                        users
+                        |> Array.map ((fun u ->
+                            auth0Mgr.Users.GetAsync(u.Key, "user_id,nickname,email", true)
+                            |> Async.AwaitTask
+                            |> Async.RunSynchronously)
+                            >> (fun resp ->
+                            { Id = resp.UserId |> Option.fromString
+                              Nickname = resp.NickName |> Option.fromString
+                              Email = resp.Email |> Option.fromString }) )
+                    let tasksAndUsers =
+                        tasks
+                        |> Array.map (fun t ->
+                            t, auth0Mgr.Users.GetAsync(t.Executor, "nickname", true)
+                            |> Async.AwaitTask
+                            |> Async.RunSynchronously
+                            |> (fun u -> u.NickName) )
+                    return! json (group, tasksAndUsers, users) next ctx
+                })
+            post "/api/task" (fun next ctx ->
+                task{
+                    use db = new DbFamilio()
+                    let! body = ctx.ReadBodyFromRequestAsync()
+                    let res = Decode.Auto.fromString<TaskDto> body
+                    let task =
+                        match res with
+                        | Ok t -> t
+                        | Error m -> raise <| InvalidOperationException m
+                    let newTask =
+                        { Id = System.Guid.NewGuid()
+                          GroupId = task.GroupId
+                          Name = task.Name
+                          Description = task.Description |> Option.toObj
+                          CreatedBy = task.CreatedBy
+                          CreatedAt = task.CreatedAt
+                          Executor = task.Executor
+                          ExpiresBy = task.ExpiresBy |> (
+                                        function
+                                        | None -> Nullable<DateTime>()
+                                        | Some dt -> Nullable<DateTime>(dt))
+                          Status = enum task.Status
+                          Priority = enum task.Priority }
+                    let! inserted = db.InsertAsync(newTask)
+                    return! json inserted next ctx
+                })
+
+            getf "/api/users/search/%s/%d" (fun (nick,(groupId: int64)) next ctx ->
+                task{
+                    use auth0Client = getAuth0Client ()
+                    use db = new DbFamilio()
+                    let req =
+                        GetUsersRequest(
+                                SearchEngine="v3",
+                                IncludeFields=Nullable(true),
+                                Fields="user_id,nickname,email",
+                                Query=(sprintf "nickname:%s" (prepare nick))
+                            )
+                    let! us = auth0Client.Users.GetAllAsync(req, PaginationInfo())
+                    let existingUsers =
+                        query {
+                            for urg in db.UsersRolesGroups do
+                                where (urg.GroupId = groupId)
+                        } |> Seq.toArray
+                    let users =
+                        us.AsEnumerable()
+                        |> Seq.map ((fun u ->
+                              { Id = u.UserId |> Option.ofObj
+                                Nickname = u.NickName |> Option.ofObj
+                                Email = u.Email |> Option.ofObj })
+                              >> (fun u -> (u, false)))
+                        |> Seq.filter ( fun (u,_) -> existingUsers.Any (fun urg -> urg.UserId = (u.Id |> Option.defaultValue "")) |> not )
+                    return! json (nick, users) next ctx
+                })
 
     }
 
