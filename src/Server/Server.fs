@@ -12,6 +12,7 @@ open Auth0.ManagementApi.Models
 open System.Net
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.HttpOverrides
+open Microsoft.AspNetCore.Authentication.OpenIdConnect
 
 module Seq =
   let tryHead s =
