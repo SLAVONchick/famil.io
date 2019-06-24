@@ -3,7 +3,9 @@ open System
 
 type Counter = { Value : int }
 
-type Status = Created = 1
+type Status = 
+  | Created = 1
+  | Closed = 2
 
 type Priority = Highest = 1
 

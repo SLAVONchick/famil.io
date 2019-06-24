@@ -176,7 +176,9 @@ module Startup =
                     let tasks =
                         query{
                             for t in db.Tasks do
-                            where (t.GroupId = id)
+                            where (t.GroupId = id &&
+                                   (not t.ExpiresBy.HasValue || t.ExpiresBy.Value > DateTime.Now.ToUniversalTime()) &&
+                                   (t.Status <> Status.Closed))
                             select t
                         } |> Seq.toArray
                     let users =
@@ -192,7 +194,7 @@ module Startup =
                             auth0Mgr.Users.GetAsync(u.Key, "user_id,nickname,email", true)
                             |> Async.AwaitTask
                             |> Async.RunSynchronously)
-                            >> (fun resp ->
+                          >> (fun resp ->
                             { Id = resp.UserId |> Option.fromString
                               Nickname = resp.NickName |> Option.fromString
                               Email = resp.Email |> Option.fromString }) )
@@ -318,6 +320,53 @@ module Startup =
                         }
                     let! inserted = if groupExists then insert urg else task { return None }
                     return! json (nick, inserted) next ctx
+                })
+             
+            put "/api/task" (fun next ctx -> 
+                task {
+                    let! body = ctx.ReadBodyFromRequestAsync()
+                    let res = Decode.Auto.fromString<TaskDto> body
+                    let taskDto = 
+                        match res with 
+                        | Ok t -> t
+                        | Error m -> raise <| InvalidOperationException m
+                    let task = 
+                        { Id = taskDto.Id
+                          GroupId = taskDto.GroupId
+                          Name = taskDto.Name
+                          Description = taskDto.Description |> Option.toObj
+                          CreatedBy = taskDto.CreatedBy
+                          CreatedAt = taskDto.CreatedAt
+                          Executor = taskDto.Executor
+                          ExpiresBy = taskDto.ExpiresBy |> Option.toNullable
+                          Status = enum taskDto.Status
+                          Priority = enum taskDto.Priority }
+                    use db = new DbFamilio()
+                    let! _ = db.UpdateAsync(task)
+                    return! json null next ctx
+                })
+            
+            deletef "/api/task/%s" (fun id next ctx ->
+                task {
+                    let id = Guid.Parse id
+                    use db = new DbFamilio()
+                    let update arg =
+                        task {
+                            let! updated = db.UpdateAsync(arg)
+                            return Some updated
+                        }
+                    let none = task {return None}
+                    let task = 
+                        query {
+                            for t in db.Tasks do
+                                where (t.Id = id)
+                                select t
+                        } 
+                        |> Seq.tryHead
+                        |> Option.map (fun t -> {t with Status = Status.Closed})
+                    let! _ = match task with | Some t -> update t | None -> none
+                    let resp = match task with | Some t -> json t next | None -> ((fun t ctx -> Response.badRequest ctx t) null)
+                    return! resp ctx
                 })
     }
 

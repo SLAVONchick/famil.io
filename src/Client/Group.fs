@@ -16,12 +16,17 @@ type State =
     | Initial
     | Loading
     | Loaded of Groups:Result<GroupDto*(TaskDto*string) list*User list, exn>
-    | UploadingTask of Task:TaskDto*Users:User list
-    | TaskUploaded of Message:string
+    | CreatingTask of Task:TaskDto*Users:User list
+    | TaskCreated of Message:string
     | TaskCreationFormOpened of Task:TaskDto option*Users:User list
+    | TaskEditorOpened of Task:TaskDto*Users:User list
+    | EditingTask of Task:TaskDto*Users:User list
+    | TaskEdited of Message:string
     | SearchUsersFormOpened of Nickname:string*Users:(User*bool) list
+    | DeletingTask of GroupDto*(TaskDto*string) list*User list*TaskId:Guid
+    | TaskDeleted of Result<unit, string>
     | SearchingUsers of Nickname:string*Users:(User*bool) list 
-    | SearchUsersFinished of Nickname:string*Users:(User*bool) list
+    | UsersFound of Nickname:string*Users:(User*bool) list
     | UserUploading of Nickname:string*Users:(User*bool) list 
     | UserUploaded of Nickname:string
 
@@ -30,15 +35,20 @@ type Msg =
     | StartLoading of GroupId:int64
     | LoadedData  of Groups:Result<GroupDto*(TaskDto*string) list*User list, exn>
     | Reset
-    | StartUploadingTask of Task:TaskDto *Users:User list
-    | TaskUploaded of Result:Result<Response, exn>
+    | StartCreatingTask of Task:TaskDto *Users:User list
+    | TaskCreatingFinished of Result:Result<Response, exn>
     | OpenTaskCreationForm of Task:TaskDto option*Users:User list
+    | CloseTaskCreationForm
+    | OpenTaskEditingForm of Task:TaskDto*Users: User list
+    | StartEdidtingTask of Task:TaskDto*Users:User list
+    | TaskEditingFinished of Result<Response, exn>
+    | StartDeletingTask of Groups:(GroupDto*(TaskDto*string) list*User list)*TaskId:Guid
+    | TaskDeletingFinished of Result<Response, exn>
     | OpenSearchUsersForm of Nickname:string*Users:(User*bool) list
     | StartUsersSearch of Nickname:string*GroupId:int64*Users:(User*bool) list
-    | CloseTaskCreationForm
     | SearchUsersFinished of Result<string*(User*bool) list , exn>
     | StartUserUploading of Nickname:string*Users:(User*bool) list*Data:UsersRolesGroupsDto
-    | UserUploaded of Result:Result<Response, exn>
+    | UserUploadingFinished of Result:Result<Response, exn>
 
 
 let getGroupsByUser groupId : Cmd<Msg> =
@@ -66,17 +76,33 @@ let postTask (task:TaskDto) =
         Cmd.ofPromise
             (res)
             [ Method HttpMethod.POST ]
-            (Ok >> TaskUploaded)
-            (Error >> TaskUploaded)
+            (Ok >> TaskCreatingFinished)
+            (Error >> TaskCreatingFinished)
     cmd
+
+let putTask (task: TaskDto) =
+    let res = postRecord "/api/task" task
+    Cmd.ofPromise
+        (res)
+        [ Method HttpMethod.PUT ]
+        (Ok >> TaskEditingFinished)
+        (Error >> TaskEditingFinished)
+
+let closeTask (taskId:Guid) =
+    let res = postRecord (sprintf "/api/task/%A" taskId) null
+    Cmd.ofPromise
+        res
+        [ Method HttpMethod.DELETE ]
+        (Ok >> TaskDeletingFinished)
+        (Error >> TaskDeletingFinished)
 
 let postUser nick (urg: UsersRolesGroupsDto) =
     let res = postRecord (sprintf "/api/group/user/%s" nick) urg
     Cmd.ofPromise 
         (res)
         [ Method HttpMethod.POST ]
-        (Ok >> UserUploaded)
-        (Error >> UserUploaded)
+        (Ok >> UserUploadingFinished)
+        (Error >> UserUploadingFinished)
 
 let getUserList =
     function
@@ -100,16 +126,16 @@ let update state msg =
     | CloseTaskCreationForm
     | Reset ->
         Initial, Cmd.none
-    | StartUploadingTask (t, us) ->
-        let nextState = UploadingTask (t, us)
+    | StartCreatingTask (t, us) ->
+        let nextState = CreatingTask (t, us)
         let nextCmd = postTask t
         nextState, nextCmd
-    | TaskUploaded res ->
+    | TaskCreatingFinished res ->
         let message =
             match res with
             | Ok _ -> "Uploaded successfully!"
             | Error e -> e.Message
-        let nextState = State.TaskUploaded message
+        let nextState = State.TaskCreated message
         nextState, Cmd.none
     | OpenTaskCreationForm (t, us) ->
         TaskCreationFormOpened (t, us), Cmd.none
@@ -121,27 +147,41 @@ let update state msg =
         nextState, nextCmd
     | SearchUsersFinished res ->
         match res with
-        | Ok (nick, users) -> State.SearchUsersFinished (nick, users), Cmd.none
-        | Error _ -> State.SearchUsersFinished ("", []), Cmd.none
+        | Ok (nick, users) -> State.UsersFound (nick, users), Cmd.none
+        | Error _ -> State.UsersFound ("", []), Cmd.none
     | StartUserUploading (nick, users, urg) ->
         let nextState = UserUploading (nick, users)
         let nextCmd = postUser nick urg
         nextState, nextCmd
-    | UserUploaded res ->
+    | UserUploadingFinished res ->
         let nick =
             match res with 
             | Ok resp -> resp.Url.Split('/') |> Seq.tryLast
             | Error _ -> None
             |> Option.defaultValue ""
         State.UserUploaded nick, Cmd.none
-        
+    | OpenTaskEditingForm (task, users) ->
+        TaskEditorOpened(task, users), Cmd.none
+    | StartEdidtingTask (task, users) ->
+        EditingTask (task, users), putTask task
+    | TaskEditingFinished res ->
+        let msg = 
+            match res with 
+            | Ok _ -> "Task successfully changed!"
+            | Error _ -> "An error has occured"
+        TaskEdited msg, Cmd.none
+    | StartDeletingTask ((g, ts, us), tId) ->
+        DeletingTask (g, ts, us, tId), closeTask tId
+    | TaskDeletingFinished res ->
+        let res = match res with | Ok _ -> Ok () | Error e -> Error (sprintf "Something went wrong!")
+        TaskDeleted res, Cmd.none       
 
 
 
 // defines the initial state and initial command (= side-effect) of the application
 let init () : State * Cmd<Msg> = State.Initial, Cmd.none
 
-let taskToElement (task:TaskDto, userName:string) =
+let taskToElement taskId dispatch onClose (task:TaskDto, userName:string) =
     Media.media [ ] [
         Media.content [  ] [
             strong [ ] [ str (task.Name + "    ") ]
@@ -156,6 +196,24 @@ let taskToElement (task:TaskDto, userName:string) =
             | None -> ""
             |> str
         ]
+        Media.right [] [
+                    Button.a [ 
+                        Button.OnClick (fun _ -> dispatch task)
+                        Button.IsText
+                        ] [ str "Edit"]
+
+                    Button.button [
+                        Button.OnClick (fun _ -> onClose task)
+                        Button.Color IsDanger
+                        Button.IsOutlined
+                        Button.Modifiers [
+                            Modifier.Display (Screen.All, Display.Block)
+                        ]
+                        Button.IsLoading (taskId = task.Id)
+                    ] [
+                        str "Close"
+                    ]
+                ]
     ]
 
 let smallButton string dispatch =
@@ -236,8 +294,9 @@ let searchUsersModal groupId (searching: bool) nick (users: (User*bool) list) (d
     modal header content footer (fun _ -> dispatch Reset)
 
 let groupToElement
-    (g:GroupDto)
-    (ts:(TaskDto*string) list)
+    (g: GroupDto)
+    (deletingTaskId: Guid)
+    (ts: (TaskDto*string) list)
     (users: User list)
     dispatch =
 
@@ -272,7 +331,9 @@ let groupToElement
         ] [
             Tile.child [
                 Tile.Option.CustomClass "notification"
-            ] ((ts |> List.map taskToElement)@ [
+            ] ((ts |> List.map (taskToElement deletingTaskId
+                    (fun t -> OpenTaskEditingForm (t, users) |> dispatch) 
+                    (fun t -> dispatch (StartDeletingTask ((g, ts, users), t.Id)))) ) @ [
                 Button.button [
                     Button.Props [ Style [ Display "block" ] ]
                     Button.IsExpanded
@@ -290,8 +351,9 @@ let userToSelectOption (user:User) =
     option [
         Value (user.Id |> Option.defaultValue "") ] [ str (user.Nickname |> Option.defaultValue "") ]
 
-let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
-    let task =
+let taskCreationModal t (us:User list) isLoading groupId userId isEdit dispatch =
+    printfn "%b" isEdit
+    let defaultTask t =
         Option.defaultValue
             { Id = System.Guid.NewGuid()
               GroupId = groupId
@@ -304,8 +366,14 @@ let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
               Status = 1
               Priority = 1 }
             t
+    let openTaskCreationForm (t,us) = if isEdit then OpenTaskEditingForm(defaultTask t, us) else OpenTaskCreationForm (t, us)
+    let startCreatingTask task us = 
+        if isEdit
+        then StartEdidtingTask (task, us)
+        else StartCreatingTask ({task with CreatedAt = System.DateTime.Now}, us)
+    let task = defaultTask t
     let header = "Create task"
-    let content =
+    let content = 
         [
             Media.media [] [
                 Media.content [] [
@@ -317,7 +385,7 @@ let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
                                 Input.Option.Modifiers [ Modifier.Display (Screen.All, Display.Option.Block) ]
                                 Input.Option.IsReadOnly isLoading
                                 Input.OnChange (fun e ->
-                                    dispatch (OpenTaskCreationForm (Some {task with Name = e.Value}, us ) ) )
+                                    dispatch (openTaskCreationForm (Some {task with Name = e.Value}, us ) ) )
                             ]
                         ]
                     ]
@@ -333,7 +401,7 @@ let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
                                 Input.Option.Modifiers [ Modifier.Display (Screen.All, Display.Option.Block) ]
                                 Input.IsReadOnly isLoading
                                 Input.OnChange (fun e ->
-                                    dispatch (OpenTaskCreationForm (Some {task with Description = Option.fromString e.Value}, us ) ) )
+                                    dispatch (openTaskCreationForm (Some {task with Description = Option.fromString e.Value}, us ) ) )
                             ]
                         ]
                     ]
@@ -349,7 +417,7 @@ let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
                             Select.select [ 
                                 Select.Disabled isLoading
                                 Select.Props [
-                                    OnChange (fun e -> dispatch (OpenTaskCreationForm (Some {task with Executor = e.Value}, us) ) )
+                                    OnChange (fun e -> dispatch (openTaskCreationForm (Some {task with Executor = e.Value}, us) ) )
                                 ] ] [
                                 select [] (
                                     us
@@ -373,7 +441,7 @@ let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
                                 Flatpickr.DisableBy (fun dt -> dt < DateTime.Now)
                                 Flatpickr.TimeTwentyFour true
                                 Flatpickr.OnChange (fun dt ->
-                                    dispatch (OpenTaskCreationForm (Some {task with ExpiresBy = Some dt}, us) ) )
+                                    dispatch (openTaskCreationForm (Some {task with ExpiresBy = Some dt}, us) ) )
                             ]
                         ]
                     ]
@@ -388,7 +456,9 @@ let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
                   Button.IsFullWidth
                   Button.IsHovered true
                   Button.Color IsInfo ] []
-              else button "Create" (fun _ -> dispatch (StartUploadingTask ({task with CreatedAt = System.DateTime.Now}, us) ) ) )
+              else button 
+                       (if isEdit then "Save" else "Create")
+                       (fun _ -> dispatch (startCreatingTask task us) ) )
           ]
     let close() = dispatch CloseTaskCreationForm
     modal header content footer close
@@ -407,22 +477,38 @@ let groupView (users:User list) (userId:string option) groupId state (dispatch: 
         | Ok (g, ts, us) ->
             if g.Id = groupId
             then
-                div [] [ groupToElement g ts us dispatch ]
+                div [] [ groupToElement g (Guid()) ts us dispatch ]
             else
                 dispatch (StartLoading groupId)
                 div [] []
     | TaskCreationFormOpened (t, us) ->
-        taskCreationModal t us false groupId userId dispatch
-    | UploadingTask (t, us) ->
-        taskCreationModal (Some t) us true groupId userId dispatch
-    | State.TaskUploaded _ ->
+        taskCreationModal t us false groupId userId false dispatch
+    | CreatingTask (t, us) ->
+        taskCreationModal (Some t) us true groupId userId false dispatch
+    | State.TaskCreated _ ->
         dispatch Reset
         div [] []
+    | TaskEditorOpened (task, us) ->
+        taskCreationModal (Some task) us false groupId userId true dispatch
+    | EditingTask (task, us) ->
+        taskCreationModal (Some task) us true groupId userId true dispatch
+    | TaskEdited _ ->
+        dispatch Reset
+        div [] []
+    | DeletingTask (g, ts, us, tId) -> 
+        div [] [ groupToElement g tId ts us dispatch ]
+    | TaskDeleted res ->
+        match res with
+        | Ok _ -> 
+            dispatch Reset
+            div [] []
+        | Error m ->
+            modal "Error" [str m] [button "OK" (fun _ -> dispatch Reset)] (fun _ -> dispatch Reset)
     | SearchUsersFormOpened (nick, us) ->
         searchUsersModal groupId false nick us dispatch
     | SearchingUsers (nick, us) ->
         searchUsersModal groupId true nick us dispatch
-    | State.SearchUsersFinished (nick, us) ->
+    | State.UsersFound (nick, us) ->
         searchUsersModal groupId false nick us dispatch
     | UserUploading (nick, us) ->
         searchUsersModal groupId false nick us dispatch
