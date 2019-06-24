@@ -22,7 +22,7 @@ let getGroupId input =
 type Page =
     | DefaultPage
     | Home
-    | Description
+    //| Description
     | Account
     | Groups
     | Group of int64
@@ -31,7 +31,7 @@ type Page =
         match x with
         | DefaultPage -> "#"
         | Home -> "#home"
-        | Description -> "#description"
+        //| Description -> "#description"
         | Account -> "#account"
         | Groups -> "#groups"
         | Group id -> sprintf "#group/%d" id
@@ -73,7 +73,7 @@ let route =
     oneOf [
         map DefaultPage (s "" </> top)
         map Home (s "home" </> top)
-        map Description (s "description" </> top)
+        //map Description (s "description" </> top)
         map Account (s "account" </> top)
         map Groups (s "groups" </> top)
         map Group (s "group/" </> i64)
@@ -145,9 +145,9 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
         nextModel, Cmd.none
     | NavigateTo u ->
         match u with
-        | (Url "#description") ->
-            let nextModel = {currentModel with Stage = Description}
-            nextModel, Navigation.modifyUrl "#description"
+        //| (Url "#description") ->
+        //    let nextModel = {currentModel with Stage = Description}
+        //    nextModel, Navigation.modifyUrl "#description"
         | (Url "#login") ->
             logInOrOut true currentModel
         | (Url "#logout") ->
@@ -180,23 +180,19 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
         nextModel, Cmd.map GroupMsg nextGroupCmd
 
 
-let safeComponents =
+let myFooter =
     let components =
         span [ ]
            [
-             a [ Href "https://saturnframework.github.io" ] [ str "Saturn" ]
-             str ", "
-             a [ Href "http://fable.io" ] [ str "Fable" ]
-             str ", "
-             a [ Href "https://elmish.github.io/elmish/" ] [ str "Elmish" ]
-             str ", "
-             a [ Href "https://fulma.github.io/Fulma" ] [ str "Fulma" ]
+             str "Have you ran into in "
+             a [ Href "https://github.com/SLAVONchick/tasks-for-my.family-issues" ] [ str "issue"]
+             str "?"
+             str " Contact "
+             a [ Href "mailto:support@tasks-for-my.family" ] [ str "support" ]
+             str " for any other purposes."
            ]
 
-    p [ ]
-        [ strong [] [ str "SAFE Template" ]
-          str " powered by: "
-          components ]
+    p [ ] [ components ]
 
 
 
@@ -245,7 +241,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
                     Navbar.Menu.Option.CustomClass (if model.IsActive then "is-active" else "")
                 ] [
                 Navbar.Item.a [] [ navItem "#home" "Home" navDispatch ]
-                Navbar.Item.a [] [ navItem "#description" "Description" navDispatch ]
+                //Navbar.Item.a [] [ navItem "#description" "Description" navDispatch ]
                 (if Account.isAuthorized model.Account then
                     Navbar.Item.a [] [ navItem "#account" "Account" navDispatch ]
                  else div [] [] )
@@ -262,8 +258,8 @@ let view (model : Model) (dispatch : Msg -> unit) =
           | DefaultPage
           | Home ->
               yield Home.view ()
-          | Description ->
-              yield Description.view ()
+          //| Description ->
+          //    yield Description.view ()
           | Account ->
               yield Account.view model.Account (AccountMsg >> dispatch)
           | Groups ->
@@ -283,7 +279,7 @@ let view (model : Model) (dispatch : Msg -> unit) =
 
           yield Footer.footer [ ]
                 [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
-                    [ safeComponents ] ] ]
+                    [ myFooter ] ] ]
 
 #if DEBUG
 open Elmish.Debug
