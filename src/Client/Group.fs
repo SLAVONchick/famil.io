@@ -19,9 +19,12 @@ type State =
     | UploadingTask of Task:TaskDto*Users:User list
     | TaskUploaded of Message:string
     | TaskCreationFormOpened of Task:TaskDto option*Users:User list
-    | SearchUsersFormOpened of Nickname:string*Users:(User*bool) list option
-    | SearchingUsers of Nickname:string*Users:(User*bool) list option
-    | SearchUsersFinished of Nickname:string*Users:(User*bool) list option
+    | SearchUsersFormOpened of Nickname:string*Users:(User*bool) list
+    | SearchingUsers of Nickname:string*Users:(User*bool) list 
+    | SearchUsersFinished of Nickname:string*Users:(User*bool) list
+    | UserUploading of Nickname:string*Users:(User*bool) list 
+    | UserUploaded of Nickname:string
+
 
 type Msg =
     | StartLoading of GroupId:int64
@@ -30,10 +33,12 @@ type Msg =
     | StartUploadingTask of Task:TaskDto *Users:User list
     | TaskUploaded of Result:Result<Response, exn>
     | OpenTaskCreationForm of Task:TaskDto option*Users:User list
-    | OpenSearchUsersForm of Nickname:string*Users:(User*bool) list option
-    | StartUsersSearch of Nickname:string*GroupId:int64*Users:(User*bool) list option
+    | OpenSearchUsersForm of Nickname:string*Users:(User*bool) list
+    | StartUsersSearch of Nickname:string*GroupId:int64*Users:(User*bool) list
     | CloseTaskCreationForm
-    | SearchUsersFinished of Result<string*(User*bool) list option, exn>
+    | SearchUsersFinished of Result<string*(User*bool) list , exn>
+    | StartUserUploading of Nickname:string*Users:(User*bool) list*Data:UsersRolesGroupsDto
+    | UserUploaded of Result:Result<Response, exn>
 
 
 let getGroupsByUser groupId : Cmd<Msg> =
@@ -47,7 +52,7 @@ let getGroupsByUser groupId : Cmd<Msg> =
     cmd
 
 let searchUsers nick (groupId: int64) : Cmd<Msg> =
-    let res = fetchAs<string*(User*bool) list option> (sprintf "/api/users/search/%s/%d" nick groupId) (Decode.Auto.generateDecoder())
+    let res = fetchAs<string*(User*bool) list> (sprintf "/api/group/%d/user/%s" groupId nick) (Decode.Auto.generateDecoder())
     Cmd.ofPromise
         (res)
         []
@@ -64,6 +69,14 @@ let postTask (task:TaskDto) =
             (Ok >> TaskUploaded)
             (Error >> TaskUploaded)
     cmd
+
+let postUser nick (urg: UsersRolesGroupsDto) =
+    let res = postRecord (sprintf "/api/group/user/%s" nick) urg
+    Cmd.ofPromise 
+        (res)
+        [ Method HttpMethod.POST ]
+        (Ok >> UserUploaded)
+        (Error >> UserUploaded)
 
 let getUserList =
     function
@@ -109,7 +122,19 @@ let update state msg =
     | SearchUsersFinished res ->
         match res with
         | Ok (nick, users) -> State.SearchUsersFinished (nick, users), Cmd.none
-        | Error _ -> State.SearchUsersFinished ("", None), Cmd.none
+        | Error _ -> State.SearchUsersFinished ("", []), Cmd.none
+    | StartUserUploading (nick, users, urg) ->
+        let nextState = UserUploading (nick, users)
+        let nextCmd = postUser nick urg
+        nextState, nextCmd
+    | UserUploaded res ->
+        let nick =
+            match res with 
+            | Ok resp -> resp.Url.Split('/') |> Seq.tryLast
+            | Error _ -> None
+            |> Option.defaultValue ""
+        State.UserUploaded nick, Cmd.none
+        
 
 
 
@@ -154,8 +179,7 @@ let searchUsersModal groupId (searching: bool) nick (users: (User*bool) list) (d
                 Control.div [] [
                     Input.text [
                         Input.Placeholder "Type user name..."
-                        Input.OnChange (fun e -> dispatch (OpenSearchUsersForm (e.Value, users |> (fun u ->
-                            match u with [] -> None | _ -> Some u )) ) )
+                        Input.OnChange (fun e -> dispatch (OpenSearchUsersForm (e.Value, users) ) )
                         Input.Value nick
                     ]
                 ]
@@ -168,8 +192,7 @@ let searchUsersModal groupId (searching: bool) nick (users: (User*bool) list) (d
                         Button.IsLoading searching
                         Button.OnClick (fun _ ->
                             if searching |> not then
-                                dispatch (StartUsersSearch (nick, groupId, users |> (fun u ->
-                                    match u with [] -> None | _ -> Some u ) ) )
+                                dispatch (StartUsersSearch (nick, groupId, users) )
                             else
                                 () ) ] [
                             str "Seacrh"
@@ -188,7 +211,21 @@ let searchUsersModal groupId (searching: bool) nick (users: (User*bool) list) (d
                             small [] [ str ( " (" + (Option.defaultValue "" u.Email) + ")" ) ]
                         ]
                         Media.right [] [
-                            button "Add user" (ignore)
+                            Button.button [
+                                Button.Color IsInfo
+                                Button.IsLoading b
+                                Button.OnClick (fun _ -> 
+                                        let users = 
+                                            users |> List.map (fun (u', _) -> if u = u' then (u', true) else (u', b))
+                                        let urg =
+                                            { UserId = u.Id |> Option.defaultWith (fun _ -> failwith "User id is none!")
+                                              RoleId = Roles.User |> int
+                                              GroupId = groupId }
+                                        dispatch (StartUserUploading (nick, users, urg) )
+                                    )
+                            ] [
+                                str "Add user"
+                            ]
                         ]
                     ]
                 )
@@ -225,7 +262,7 @@ let groupToElement
                  [ Button.button [
                     Button.Props [ Style [ Display "block" ] ]
                     Button.IsExpanded
-                    Button.OnClick (fun _ -> dispatch (OpenSearchUsersForm ("", None) ) )
+                    Button.OnClick (fun _ -> dispatch (OpenSearchUsersForm ("", []) ) )
                  ] [
                     str "Add users"
                    ]
@@ -249,9 +286,8 @@ let groupToElement
         ]
     ]
 
-let userToSelectOption dispatch (user:User) =
+let userToSelectOption (user:User) =
     option [
-        OnSelect (fun _ -> dispatch (user.Id |> Option.defaultValue ""))
         Value (user.Id |> Option.defaultValue "") ] [ str (user.Nickname |> Option.defaultValue "") ]
 
 let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
@@ -310,12 +346,14 @@ let taskCreationModal t (us:User list) isLoading groupId userId dispatch =
                             strong [ ] [ str "Executor:" ]
                         ]
                         Column.column [  ] [
-                            Select.select [ Select.Disabled isLoading ] [
+                            Select.select [ 
+                                Select.Disabled isLoading
+                                Select.Props [
+                                    OnChange (fun e -> dispatch (OpenTaskCreationForm (Some {task with Executor = e.Value}, us) ) )
+                                ] ] [
                                 select [] (
                                     us
-                                    |> List.map (userToSelectOption (fun id ->
-                                        dispatch (OpenTaskCreationForm (Some {task with Executor = id}, us) )
-                                        ) )
+                                    |> List.map (userToSelectOption)
                                     )
                             ]
 
@@ -381,8 +419,13 @@ let groupView (users:User list) (userId:string option) groupId state (dispatch: 
         dispatch Reset
         div [] []
     | SearchUsersFormOpened (nick, us) ->
-        searchUsersModal groupId false nick (Option.defaultValue [] us) dispatch
+        searchUsersModal groupId false nick us dispatch
     | SearchingUsers (nick, us) ->
-        searchUsersModal groupId true nick (Option.defaultValue [] us) dispatch
+        searchUsersModal groupId true nick us dispatch
     | State.SearchUsersFinished (nick, us) ->
-        searchUsersModal groupId false nick (Option.defaultValue [] us) dispatch
+        searchUsersModal groupId false nick us dispatch
+    | UserUploading (nick, us) ->
+        searchUsersModal groupId false nick us dispatch
+    | State.UserUploaded nick ->
+        dispatch (StartUsersSearch (nick, groupId, []))
+        div [] []

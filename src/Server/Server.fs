@@ -113,11 +113,6 @@ module Startup =
     open Server.Tables
     let webApp =
         router {
-            get "/api/init" (fun next ctx ->
-                task {
-                    let! counter = getInitCounter()
-                    return! json counter next ctx
-                })
             getf "/api/login/%s" (fun uri next ctx ->
                 task{
                     let props =
@@ -128,6 +123,7 @@ module Startup =
                     do! login ctx props
                     return! json null next ctx
                 })
+
             getf "/api/logout/%s" (fun uri next ctx ->
                 task{
                     let props =
@@ -136,10 +132,6 @@ module Startup =
                                             "http://localhost:8085/api/callback"
                                          else uri))
                     do! logout ctx props
-                    return! json null next ctx
-                })
-            post "/api/callback" (fun next ctx ->
-                task {
                     return! json null next ctx
                 })
 
@@ -170,33 +162,6 @@ module Startup =
                         |> Array.filter (fun g -> Option.isNone g.Key.DeletedAt && Option.isNone g.Key.DeletedBy)
                         |> Array.map (fun g -> g.Key)
                     return! json res next ctx
-                })
-
-            post "/api/group" (fun next ctx ->
-                task {
-                    let! body = ctx.ReadBodyFromRequestAsync()
-                    let res = Decode.Auto.fromString<GroupDto> body
-                    let group =
-                        match res with
-                        | Error _ -> raise <| InvalidOperationException("")
-                        | Ok g -> g
-                    use db = new DbFamilio()
-                    let newGroup =
-                        { Id = 0L
-                          Name = group.Name
-                          CreatedAt = group.CreatedAt
-                          CreatedBy = group.CreatedBy
-                          DeletedAt = group.DeletedAt
-                          DeletedBy = group.DeletedBy }
-                    use! tran =  db.BeginTransactionAsync()
-                    let! insertedGroupId = db.InsertWithInt64IdentityAsync(newGroup)
-                    let urg =
-                        { UserId = newGroup.CreatedBy
-                          GroupId = insertedGroupId
-                          RoleId = (Roles.Admin |> int) }
-                    let! inserted = db.InsertAsync(urg)
-                    do! tran.CommitAsync()
-                    return! json insertedGroupId next ctx
                 })
 
             getf "/api/group/%d" (fun id next ctx ->
@@ -240,34 +205,8 @@ module Startup =
                             |> (fun u -> u.NickName) )
                     return! json (group, tasksAndUsers, users) next ctx
                 })
-            post "/api/task" (fun next ctx ->
-                task{
-                    use db = new DbFamilio()
-                    let! body = ctx.ReadBodyFromRequestAsync()
-                    let res = Decode.Auto.fromString<TaskDto> body
-                    let task =
-                        match res with
-                        | Ok t -> t
-                        | Error m -> raise <| InvalidOperationException m
-                    let newTask =
-                        { Id = System.Guid.NewGuid()
-                          GroupId = task.GroupId
-                          Name = task.Name
-                          Description = task.Description |> Option.toObj
-                          CreatedBy = task.CreatedBy
-                          CreatedAt = task.CreatedAt
-                          Executor = task.Executor
-                          ExpiresBy = task.ExpiresBy |> (
-                                        function
-                                        | None -> Nullable<DateTime>()
-                                        | Some dt -> Nullable<DateTime>(dt))
-                          Status = enum task.Status
-                          Priority = enum task.Priority }
-                    let! inserted = db.InsertAsync(newTask)
-                    return! json inserted next ctx
-                })
 
-            getf "/api/users/search/%s/%d" (fun (nick,(groupId: int64)) next ctx ->
+            getf "/api/group/%d/user/%s" (fun ((groupId: int64), nick) next ctx ->
                 task{
                     use auth0Client = getAuth0Client ()
                     use db = new DbFamilio()
@@ -294,7 +233,92 @@ module Startup =
                         |> Seq.filter ( fun (u,_) -> existingUsers.Any (fun urg -> urg.UserId = (u.Id |> Option.defaultValue "")) |> not )
                     return! json (nick, users) next ctx
                 })
+                
+            post "/api/callback" (fun next ctx ->
+                task {
+                    return! json null next ctx
+                })
 
+            post "/api/group" (fun next ctx ->
+                task {
+                    let! body = ctx.ReadBodyFromRequestAsync()
+                    let res = Decode.Auto.fromString<GroupDto> body
+                    let group =
+                        match res with
+                        | Error _ -> raise <| InvalidOperationException("")
+                        | Ok g -> g
+                    use db = new DbFamilio()
+                    let newGroup =
+                        { Id = 0L
+                          Name = group.Name
+                          CreatedAt = group.CreatedAt
+                          CreatedBy = group.CreatedBy
+                          DeletedAt = group.DeletedAt
+                          DeletedBy = group.DeletedBy }
+                    use! tran =  db.BeginTransactionAsync()
+                    let! insertedGroupId = db.InsertWithInt64IdentityAsync(newGroup)
+                    let urg =
+                        { UserId = newGroup.CreatedBy
+                          GroupId = insertedGroupId
+                          RoleId = (Roles.Admin |> int) }
+                    let! _ = db.InsertAsync(urg)
+                    do! tran.CommitAsync()
+                    return! json insertedGroupId next ctx
+                })
+
+            post "/api/task" (fun next ctx ->
+                task{
+                    use db = new DbFamilio()
+                    let! body = ctx.ReadBodyFromRequestAsync()
+                    let res = Decode.Auto.fromString<TaskDto> body
+                    let task =
+                        match res with
+                        | Ok t -> t
+                        | Error m -> raise <| InvalidOperationException m
+                    let newTask =
+                        { Id = System.Guid.NewGuid()
+                          GroupId = task.GroupId
+                          Name = task.Name
+                          Description = task.Description |> Option.toObj
+                          CreatedBy = task.CreatedBy
+                          CreatedAt = task.CreatedAt
+                          Executor = task.Executor
+                          ExpiresBy = task.ExpiresBy |> Option.toNullable
+                          Status = enum task.Status
+                          Priority = enum task.Priority }
+                    let! inserted = db.InsertAsync(newTask)
+                    return! json inserted next ctx
+                })
+
+            postf "/api/group/user/%s" (fun nick next ctx -> 
+                task {
+                    let! body = ctx.ReadBodyFromRequestAsync()
+                    let res = Decode.Auto.fromString<UsersRolesGroupsDto> body
+                    let urg = 
+                        match res with 
+                        | Ok urg  -> urg
+                        | Error msg -> raise <| InvalidOperationException msg                    
+                    use db = new DbFamilio()
+                    let groupExists =
+                        query {
+                            for g in db.Groups do
+                                where (g.Id = urg.GroupId)
+                                select g
+                        } 
+                        |> Seq.tryHead
+                        |> Option.isSome
+                    let urg = 
+                        { UserId = urg.UserId
+                          RoleId = urg.RoleId
+                          GroupId = urg.GroupId }
+                    let insert arg =
+                        task {
+                            let! inserted = db.InsertAsync(arg)
+                            return Some inserted
+                        }
+                    let! inserted = if groupExists then insert urg else task { return None }
+                    return! json (nick, inserted) next ctx
+                })
     }
 
     let configureSerialization (services:IServiceCollection) =
