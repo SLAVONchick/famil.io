@@ -1,18 +1,17 @@
 namespace Server
-open System.Collections.Generic
 open System.Net.Http
 open Auth0.ManagementApi
 open LinqToDB.Configuration
 open LinqToDB.Data
-open LinqToDB.Linq
-open System.Collections.Generic
 open System.Linq
 open Server.Db
 open Shared.Dto
 open LinqToDB
 open Thoth.Json.Net
-open System.Text.Encodings.Web
 open Auth0.ManagementApi.Models
+open System.Net
+open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.HttpOverrides
 
 module Seq =
   let tryHead s =
@@ -24,13 +23,11 @@ module Seq =
 module Startup =
     open System.IO
     open System.Threading.Tasks
-    open Microsoft.AspNetCore.Builder;
     open Microsoft.AspNetCore.Hosting;
     open Microsoft.Extensions.Configuration;
     open Microsoft.Extensions.DependencyInjection;
     open Microsoft.Extensions.Logging;
     open Microsoft.AspNetCore.Http
-    open Microsoft.AspNetCore.Authentication.OpenIdConnect
     open Microsoft.AspNetCore.Authentication.Cookies
     open System
     open Microsoft.AspNetCore.Authentication
@@ -57,6 +54,8 @@ module Startup =
     let tryGetEnv = System.Environment.GetEnvironmentVariable >> function null | "" -> None | x -> Some x
 
     let publicPath = match tryGetEnv "STATIC_FILES" with | None -> Path.GetFullPath "../Client/" | Some v -> v
+
+    let proxyIpAddress = (match tryGetEnv "PROXY_IP" with | None -> "0.0.0.0" | Some ip -> ip) |> IPAddress.Parse
 
     let configuration =
         ConfigurationBuilder().AddJsonFile(
@@ -331,7 +330,8 @@ module Startup =
         DataConnection.DefaultSettings <- DbSettings(providers, postgre, postgre, settings)
         services.AddSingleton<Giraffe.Serialization.Json.IJsonSerializer>(Thoth.Json.Giraffe.ThothSerializer())
         |> ignore
-        services.AddAuthentication(fun o ->
+        services
+         .AddAuthentication(fun o ->
             o.DefaultAuthenticateScheme <- CookieAuthenticationDefaults.AuthenticationScheme;
             o.DefaultSignInScheme <- CookieAuthenticationDefaults.AuthenticationScheme;
             o.DefaultChallengeScheme <- CookieAuthenticationDefaults.AuthenticationScheme;
@@ -377,7 +377,11 @@ module Startup =
         services
 
     let configureApp(app: IApplicationBuilder) =
-        app.UseDeveloperExceptionPage()
+        app.UseForwardedHeaders(ForwardedHeadersOptions(
+                                    ForwardedHeaders=(ForwardedHeaders.XForwardedFor ||| ForwardedHeaders.XForwardedProto)
+                                    )
+                               )
+           .UseDeveloperExceptionPage()
            .UseAuthentication()
 
     let configureLogging(log: ILoggingBuilder) =
