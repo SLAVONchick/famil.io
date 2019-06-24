@@ -56,7 +56,7 @@ module Startup =
 
     let tryGetEnv = System.Environment.GetEnvironmentVariable >> function null | "" -> None | x -> Some x
 
-    let publicPath = Path.GetFullPath "../Client/"
+    let publicPath = match tryGetEnv "STATIC_FILES" with | None -> Path.GetFullPath "../Client/" | Some v -> v
 
     let configuration =
         ConfigurationBuilder().AddJsonFile(
