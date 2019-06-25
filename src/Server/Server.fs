@@ -14,12 +14,7 @@ open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.HttpOverrides
 open Microsoft.AspNetCore.Authentication.OpenIdConnect
 
-module Seq =
-  let tryHead s =
-    try
-      s |> Seq.head |> Some
-    with _ ->
-      None
+
 
 module Startup =
     open System.IO
@@ -64,34 +59,35 @@ module Startup =
             @"./appsettings.json").Build()
 
     let getApiToken () =
-        use client = new HttpClient()
-        let s =
-            sprintf
-                "grant_type=client_credentials&client_id=%s&client_secret=%s&audience=%s"
-                configuration.["Auth0:ClientId"]
-                configuration.["Auth0:ClientSecret"]
-                configuration.["Auth0:Identifier"]
-        printfn "%s" s
-        use content = new StringContent(s)
-        content.Headers.Remove("content-type") |> ignore
-        content.Headers.Add("content-type", "application/x-www-form-urlencoded")
-        let resp =
-            client.PostAsync(Uri(configuration.["Auth0:TokenUri"]), content)
-            |> Async.AwaitTask
-            |> Async.RunSynchronously
-        resp.Content.ReadAsStringAsync()
-        |> Async.AwaitTask
-        |> Async.RunSynchronously
-        |> Decode.Auto.fromString<TokenResponse>
+        task {
+            use client = new HttpClient()
+            let s =
+                sprintf
+                    "grant_type=client_credentials&client_id=%s&client_secret=%s&audience=%s"
+                    configuration.["Auth0:ClientId"]
+                    configuration.["Auth0:ClientSecret"]
+                    configuration.["Auth0:Identifier"]
+            printfn "%s" s
+            use content = new StringContent(s)
+            content.Headers.Remove("content-type") |> ignore
+            content.Headers.Add("content-type", "application/x-www-form-urlencoded")
+            let! resp = client.PostAsync(Uri(configuration.["Auth0:TokenUri"]), content)
+            let! content = resp.Content.ReadAsStringAsync()
+            return content |> Decode.Auto.fromString<TokenResponse>
+        }
 
 
     let getAuth0Client () =
-        let token =
-            match getApiToken() with
-            | Error e -> raise <| InvalidOperationException(e)
-            | Ok r -> r.access_token
-        new ManagementApiClient(token,
+        task {
+            let! token =
+                task {
+                    match! getApiToken() with
+                    | Error e -> raise <| InvalidOperationException(e); return ""
+                    | Ok r -> return r.access_token
+                }
+            return new ManagementApiClient(token,
                                  Uri(configuration.["Auth0:Identifier"]))
+        }
 
     let port = "SERVER_PORT" |> tryGetEnv |> Option.map uint16 |> Option.defaultValue 8085us
 
@@ -137,7 +133,7 @@ module Startup =
 
             get "/api/users/current" (fun next ctx ->
                 task {
-                    use auth0Client = getAuth0Client ()
+                    use! auth0Client = getAuth0Client ()
                     ctx.SetHttpHeader "Access-Control-Allow-Origin" "*"
                     let user = ctx.User.Claims |> Seq.tryHead
                     let id = user |> function | Some x -> x.Value | None -> ""
@@ -187,7 +183,7 @@ module Startup =
                             where (ugr.GroupId = id)
                             groupBy ugr.UserId
                         } |> Seq.toArray
-                    use auth0Mgr = getAuth0Client()
+                    use! auth0Mgr = getAuth0Client()
                     let users =
                         users
                         |> Array.map ((fun u ->
@@ -210,7 +206,7 @@ module Startup =
 
             getf "/api/group/%d/user/%s" (fun ((groupId: int64), nick) next ctx ->
                 task{
-                    use auth0Client = getAuth0Client ()
+                    use! auth0Client = getAuth0Client ()
                     use db = new DbFamilio()
                     let req =
                         GetUsersRequest(
