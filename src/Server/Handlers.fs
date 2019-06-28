@@ -274,6 +274,7 @@ module Tasks =
             let! inserted = db.InsertAsync(newTask)
             return! json inserted next ctx
         }
+        
     let editTask next (ctx: HttpContext) =
         task {
             let! body = ctx.ReadBodyFromRequestAsync()
@@ -297,6 +298,7 @@ module Tasks =
             let! _ = db.UpdateAsync(task)
             return! json null next ctx
         }
+
     let closeTask (id: string) next ctx =
         task {
             let id = Guid.Parse id
