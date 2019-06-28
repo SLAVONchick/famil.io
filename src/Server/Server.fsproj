@@ -8,6 +8,7 @@
     <Compile Include="..\Shared\Shared.fs" />
     <Compile Include="Tables.fs" />
     <Compile Include="Db.fs" />
+    <Compile Include="Handlers.fs" />
     <Compile Include="Server.fs" />
   </ItemGroup>
   <ItemGroup>
