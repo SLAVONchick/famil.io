@@ -1,36 +1,25 @@
 namespace Server
-open System.Net.Http
-open Auth0.ManagementApi
 open LinqToDB.Configuration
 open LinqToDB.Data
-open System.Linq
 open Server.Db
-open Shared.Dto
-open LinqToDB
-open Thoth.Json.Net
-open Auth0.ManagementApi.Models
 open System.Net
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.HttpOverrides
 open Microsoft.AspNetCore.Authentication.OpenIdConnect
+open System.IO
+open System.Threading.Tasks
+open Microsoft.Extensions.Configuration;
+open Microsoft.Extensions.DependencyInjection;
+open Microsoft.Extensions.Logging;
+open Microsoft.AspNetCore.Http
+open Microsoft.AspNetCore.Authentication.Cookies
+open System
+open Saturn
+open Shared
 
 
 
 module Startup =
-    open System.IO
-    open System.Threading.Tasks
-    open Microsoft.AspNetCore.Hosting;
-    open Microsoft.Extensions.Configuration;
-    open Microsoft.Extensions.DependencyInjection;
-    open Microsoft.Extensions.Logging;
-    open Microsoft.AspNetCore.Http
-    open Microsoft.AspNetCore.Authentication.Cookies
-    open System
-    open Microsoft.AspNetCore.Authentication
-    open FSharp.Control.Tasks.V2
-    open Giraffe
-    open Saturn
-    open Shared
 
     let tryGetEnv = System.Environment.GetEnvironmentVariable >> Option.fromString
 
@@ -39,12 +28,12 @@ module Startup =
     let proxyIpAddress = (match tryGetEnv "PROXY_IP" with | None -> "0.0.0.0" | Some ip -> ip) |> IPAddress.Parse
 
     let configuration =
-        ConfigurationBuilder().AddJsonFile(
-            //"/home/viacheslav/repositories/famil.io/src/Server/appsettings.json"
-            @"./appsettings.json").Build()
+        ConfigurationBuilder()
+            .AddJsonFile(@"./appsettings.json")
+            .Build()
 
     let port = "SERVER_PORT" |> tryGetEnv |> Option.map uint16 |> Option.defaultValue 8085us
-    
+
     let webApp =
         router {
             getf "/api/login/%s" Account.login
@@ -114,7 +103,7 @@ module Startup =
                     ctx.ProtocolMessage.SetParameter("audience", apiId) |> ignore
                     Task.CompletedTask)
               o.Events <- events)
-         |> ignore
+        |> ignore
         services
 
     let configureApp(app: IApplicationBuilder) =
@@ -126,7 +115,8 @@ module Startup =
            .UseAuthentication()
 
     let configureLogging(log: ILoggingBuilder) =
-        log.AddConsole().AddDebug()
+        log.AddConsole()
+            .AddDebug()
         |> ignore
 
     let app = application {
