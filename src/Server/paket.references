@@ -1,4 +1,12 @@
+linq2db
+linq2db.Identity
 group Server
-    FSharp.Core
-    Saturn
-    Thoth.Json.Giraffe
+FSharp.Core
+Saturn
+Thoth.Json.Giraffe
+Microsoft.AspNetCore.Authentication.Cookies
+Microsoft.AspNetCore.Authentication.OpenIdConnect
+Auth0.ManagementApi
+Thoth.Json
+Thoth.Json.Net
+Npgsql

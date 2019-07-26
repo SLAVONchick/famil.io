@@ -8,7 +8,7 @@
         "@babel/runtime": "^7.2.0",
         "babel-loader": "^8.0.0",
         "copy-webpack-plugin": "^4.6.0",
-        "css-loader": "^2.0.1",
+        "css-loader": "^2.1.1",
         "fable-compiler": "^2.1.8",
         "fable-loader": "^2.1.1",
         "html-webpack-plugin": "^3.2.0",
@@ -23,5 +23,9 @@
         "webpack-cli": "^3.1.2",
         "webpack-dev-server": "^3.1.14",
         "whatwg-fetch": "^3.0.0"
+    },
+    "dependencies": {
+        "flatpickr": "^4.5.7",
+        "react-flatpickr": "^3.9.0"
     }
 }

@@ -1,12 +1,24 @@
+source https://www.nuget.org/api/v2
+
+nuget FSharp.Core
+nuget linq2db
+nuget linq2db.Identity
+nuget linq2db.PostgreSQL
 version 5.198.0
 group Server
     source https://api.nuget.org/v3/index.json
     framework: netcoreapp2.2
     storage: none
-
+    nuget Auth0.ManagementApi
+    nuget linq2db.Identity
     nuget FSharp.Core
+    nuget linq2db.PostgreSQL
+    nuget Microsoft.AspNetCore.Authentication.OpenIdConnect
+    nuget Npgsql
     nuget Saturn
-    nuget Thoth.Json.Giraffe
+nuget Thoth.Json 2.5.0
+    nuget Thoth.Json.Giraffe 1.1.0
+nuget Thoth.Json.Net 2.5.0
 
 group Client
     source https://api.nuget.org/v3/index.json
@@ -19,6 +31,7 @@ group Client
     nuget Fable.Elmish.React ~> 2
     nuget Fable.Elmish.HMR ~> 2
     nuget Fable.React ~> 4
+nuget Fable.React.Flatpickr
     nuget Fulma
     nuget Fable.FontAwesome.Free
 
@@ -32,4 +45,3 @@ group Build
     nuget Fake.Core.Target
     nuget Fake.DotNet.Cli
     nuget Fake.IO.FileSystem
-

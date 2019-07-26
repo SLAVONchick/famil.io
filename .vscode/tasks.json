@@ -47,7 +47,7 @@
         {
             "label": "Watch Client",
             "command": "fake",
-            "args": [ "build", "-t", "Run" ],
+            "args": [ "build", "-t", "RunClient" ],
             "type": "shell",
             "options": {
                 "cwd": "${workspaceFolder}",
